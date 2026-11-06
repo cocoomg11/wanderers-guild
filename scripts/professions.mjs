@@ -31,11 +31,14 @@ export function viewOf(actor) {
 const Base = RememberedWindow(foundry.applications.api.ApplicationV2, { moduleId: ID, key: "professions" });
 
 export class ProfessionsApp extends Base {
-  /** @param {{ actor: any } & Record<string, any>} options */
-  constructor(options) {
-    super({ id: `${ID}-professions-${options.actor?.id ?? "none"}`, ...options });
-    this.actor = options.actor;
-    if (this.actor?.id) OPEN.set(this.actor.id, this);
+  /**
+   * The actor is kept out of the options (ApplicationV2 merges options into plain objects).
+   * @param {any} actor @param {Record<string, any>} [options]
+   */
+  constructor(actor, options = {}) {
+    super({ id: `${ID}-professions-${String(actor?.id ?? "none")}`, ...options });
+    this.actor = actor;
+    if (actor?.id) OPEN.set(actor.id, this);
   }
 
   static DEFAULT_OPTIONS = {
@@ -87,7 +90,7 @@ export function open(actor) {
   const a = typeof actor === "string" ? (game.actors?.get(actor) ?? /** @type {any} */ (globalThis).fromUuidSync?.(actor)) : actor;
   if (!a || !(a instanceof Actor) || !D5.TYPES.includes(a.type)) { ui.notifications.warn(`${TITLE}: pick a character or NPC.`); return undefined; }
   if (!canView(a)) { ui.notifications.warn(`${TITLE}: you can't see ${a.name}'s professions.`); return undefined; }
-  const app = OPEN.get(a.id) ?? new ProfessionsApp({ actor: a });
+  const app = OPEN.get(a.id) ?? new ProfessionsApp(a);
   app.render({ force: true });
   return app;
 }
