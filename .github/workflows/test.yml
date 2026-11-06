@@ -1,0 +1,20 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # wanderers-core's reusable checks: the vendored core matches its pin (and the published release), then syntax check, ESLint,
+  # the JSDoc type check (tsc) and the unit tests. package.json lists eslint and typescript as exact devDependencies, with a
+  # committed package-lock.json. Keep the tag equal to the pinned core version (wanderers-core.lock.json).
+  checks:
+    uses: cocoomg11/wanderers-core/.github/workflows/module-checks.yml@v0.5.2
+    with:
+      types: true

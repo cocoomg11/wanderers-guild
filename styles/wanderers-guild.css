@@ -1,0 +1,6 @@
+/* Wanderer's Guild. Windows use .wg-window plus core's shared look (UI_CLASSES; badges, buttons, tones and the like are core's wc-* classes, see core docs/ui.md); no backdrop blur (it costs a lot of frame rate in Foundry v14). */
+.wg-window { backdrop-filter: none !important; }
+.wg-window .window-content { padding: 0; }
+.wg-window .wg-scroll { overflow-y: auto; height: 100%; padding: 0.6rem 0.8rem; display: flex; flex-direction: column; gap: 0.5rem; }
+.wg-window .wg-footer { display: flex; gap: 0.4rem; justify-content: flex-end; margin-top: 0.5rem; }
+.wg-window .wg-footer button { flex: 0 0 auto; }

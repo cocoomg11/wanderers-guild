@@ -1,0 +1,21 @@
+{
+  "name": "wanderers-guild",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Tests and checks for the Wanderer's Guild Foundry VTT module (the module itself needs no install step).",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "check": "for f in scripts/*.mjs tests/*.mjs eslint.config.mjs; do node --check \"$f\" || exit 1; done",
+    "lint": "eslint .",
+    "types": "tsc -p tsconfig.json",
+    "typecheck": "npm run types",
+    "core:verify": "node vendor/wanderers-core/vendor.mjs verify",
+    "ci": "npm run check && npm run lint && npm run types && npm test && npm run core:verify"
+  },
+  "devDependencies": {
+    "eslint": "10.13.0",
+    "typescript": "7.0.2"
+  }
+}
