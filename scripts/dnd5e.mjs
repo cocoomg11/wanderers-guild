@@ -1,0 +1,76 @@
+/**
+ * Everything read from the dnd5e system, in one place: the world's tool and skill lists with their labels, rarity labels, and a
+ * character's plain facts (proficiency bonus, level, tool proficiencies) from its prepared data. Read only: nothing here writes.
+ * Untested in Node (needs dnd5e loaded); the decisions are in character-model.mjs.
+ *
+ * dnd5e 6.x: `CONFIG.DND5E.tools` (key → { ability, id }), labels from `dnd5e.documents.Trait.keyLabel(key, { trait: "tool" })`;
+ * an actor's `system.tools[key]` has `value` (0, 0.5, 1, 2) and a prepared `prof` (Proficiency, `multiplier`);
+ * `system.attributes.prof` is the proficiency bonus; `system.details.level` the character level.
+ */
+import { SYSTEM_ID } from "./const.mjs";
+
+const loc = (/** @type {unknown} */ s) => { const t = String(s ?? ""); try { return game.i18n?.localize?.(t) ?? t; } catch { return t; } };
+const D = () => /** @type {any} */ (globalThis).CONFIG?.DND5E ?? {};
+
+/** Whether the world runs dnd5e. */
+export const isDnd5e = () => game.system?.id === SYSTEM_ID;
+
+/** A tool key's label, or the key. @param {string} key */
+export function toolLabel(key) {
+  try {
+    const Trait = /** @type {any} */ (globalThis).dnd5e?.documents?.Trait;
+    const l = Trait?.keyLabel?.(key, { trait: "tool" });
+    if (typeof l === "string" && l) return l;
+  } catch { /* fall through */ }
+  return loc(D().tools?.[key]?.label ?? key);
+}
+
+/** The world's tools, sorted by label: [{ key, label }]. */
+export function toolChoices() {
+  const keys = Object.keys(D().tools ?? {});
+  return keys.map(key => ({ key, label: toolLabel(key) })).sort((a, b) => a.label.localeCompare(b.label, game.i18n?.lang));
+}
+
+/** The world's skills, sorted by label: [{ key, label }]. */
+export function skillChoices() {
+  return Object.entries(D().skills ?? {}).map(([key, s]) => ({ key, label: loc(/** @type {any} */ (s)?.label ?? key) }))
+    .sort((a, b) => a.label.localeCompare(b.label, game.i18n?.lang));
+}
+
+/** The world's rarities in dnd5e's order (CONFIG.DND5E.itemRarity), as { key: label }. */
+export function rarityLabels() {
+  return Object.fromEntries(Object.entries(D().itemRarity ?? {}).map(([k, v]) => [k, loc(v)]));
+}
+
+/** Every label the character model needs. @returns {import("./character-model.mjs").Labels} */
+export function labels() {
+  const d = D();
+  return {
+    tools: Object.fromEntries(toolChoices().map(t => [t.key, t.label])),
+    skills: Object.fromEntries(Object.entries(d.skills ?? {}).map(([k, s]) => [k, { label: loc(/** @type {any} */ (s)?.label ?? k), ability: /** @type {any} */ (s)?.ability }])),
+    abilities: Object.fromEntries(Object.entries(d.abilities ?? {}).map(([k, a]) => [k, loc(/** @type {any} */ (a)?.label ?? k)])),
+    rarities: rarityLabels()
+  };
+}
+
+/** Actor types that have professions. */
+export const TYPES = Object.freeze(["character", "npc"]);
+
+/**
+ * A character's plain facts from its prepared data.
+ * @param {any} actor
+ * @returns {import("./character-model.mjs").CharacterFacts}
+ */
+export function facts(actor) {
+  const sys = actor?.system ?? {};
+  /** @type {Record<string, number>} */
+  const tools = {};
+  for (const [key, t] of Object.entries(sys.tools ?? {})) {
+    const e = /** @type {any} */ (t);
+    const m = Number(e?.prof?.multiplier ?? e?.value ?? 0);
+    tools[key] = Number.isFinite(m) ? m : 0;
+  }
+  const pb = Number(sys.attributes?.prof);
+  const level = actor?.type === "character" ? Number(sys.details?.level) : NaN;
+  return { name: actor?.name ?? "", type: actor?.type, level: Number.isFinite(level) && level > 0 ? level : null, pb: Number.isFinite(pb) ? pb : null, tools };
+}

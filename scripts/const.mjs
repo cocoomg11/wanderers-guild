@@ -8,3 +8,6 @@ export const ID = "wanderers-guild";
 export const TITLE = "Wanderer's Guild";
 /** Hooks we fire (see README, Public API and hooks). */
 export const HOOKS = { ready: `${ID}.ready` };
+/** Optional modules we read through their public API (never required). */
+export const TOOLKIT_ID = "wayfarers-toolkit";
+export const SYSTEM_ID = "dnd5e";

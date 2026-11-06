@@ -1,7 +1,7 @@
 {
   "id": "wanderers-guild",
   "title": "Wanderer's Guild",
-  "description": "Professions for dnd5e built on tool proficiencies: rank follows the proficiency bonus, with a GM setup window and a Professions view per character.",
+  "description": "Professions for dnd5e built on tool proficiencies: a character has every profession whose tool they are proficient with, and its rank follows the proficiency bonus. A GM setup window for the definitions and rank names, and a Professions window per character.",
   "version": "0.1.0",
   "authors": [
     {
@@ -10,7 +10,31 @@
   ],
   "compatibility": {
     "minimum": "13",
-    "verified": "14.369"
+    "verified": "14.370"
+  },
+  "relationships": {
+    "systems": [
+      {
+        "id": "dnd5e",
+        "type": "system",
+        "compatibility": {
+          "minimum": "6.0.0",
+          "verified": "6.0.6"
+        }
+      }
+    ],
+    "recommends": [
+      {
+        "id": "wayfarers-toolkit",
+        "type": "module",
+        "reason": "Optional. In a later version, crafting prices can use the toolkit's three-coin economy (read through its API)."
+      },
+      {
+        "id": "item-piles",
+        "type": "module",
+        "reason": "Optional. Later versions hand crafted and gathered items out with Item Piles when it is active."
+      }
+    ]
   },
   "esmodules": [
     "scripts/main.mjs"

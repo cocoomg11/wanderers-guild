@@ -1,6 +1,101 @@
-/* Wanderer's Guild. Windows use .wg-window plus core's shared look (UI_CLASSES; badges, buttons, tones and the like are core's wc-* classes, see core docs/ui.md); no backdrop blur (it costs a lot of frame rate in Foundry v14). */
+/*
+ * Wanderer's Guild. Windows use .wg-window plus core's shared look (UI_CLASSES; badges, buttons, panels, tables and the shell are
+ * core's wc-* classes, see core docs/ui.md). Every selector here starts at a .wg-* class. No backdrop blur (it costs a lot of frame
+ * rate in Foundry v14).
+ *
+ * The Professions window (.wg-prof) keeps its own dark, in-world palette in both Foundry themes: its tokens are set on .wg-prof
+ * and there are no theme selectors in this file.
+ */
 .wg-window { backdrop-filter: none !important; }
-.wg-window .window-content { padding: 0; }
-.wg-window .wg-scroll { overflow-y: auto; height: 100%; padding: 0.6rem 0.8rem; display: flex; flex-direction: column; gap: 0.5rem; }
-.wg-window .wg-footer { display: flex; gap: 0.4rem; justify-content: flex-end; margin-top: 0.5rem; }
-.wg-window .wg-footer button { flex: 0 0 auto; }
+
+/* ---------------------------------------------------------------- setup window (core shell) */
+.wg-setup-window .window-content { padding: 0; }
+.wg-setup-window .wg-main { display: flex; flex-direction: column; gap: 0.6rem; }
+.wg-setup-window .wg-form { display: flex; flex-direction: column; gap: 0.5rem; }
+.wg-setup-window .wg-field { display: grid; grid-template-columns: 11rem minmax(0, 1fr); gap: 0.5rem; align-items: center; }
+.wg-setup-window .wg-field.wg-wide { align-items: start; }
+.wg-setup-window .wg-field > span { color: var(--wc-text-2); }
+.wg-setup-window .wg-fieldset { border: 1px solid var(--wc-line); border-radius: var(--wc-radius-sm); padding: 0.4rem 0.6rem; margin: 0; }
+.wg-setup-window .wg-fieldset legend { padding: 0 0.3rem; color: var(--wc-text-2); }
+.wg-setup-window .wg-checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr)); gap: 0.15rem 0.6rem; }
+.wg-setup-window .wg-check { display: inline-flex; align-items: center; gap: 0.35rem; }
+.wg-setup-window .wg-check.wg-block { display: flex; }
+.wg-setup-window .wg-icons { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.wg-setup-window .wg-iconpick { position: relative; cursor: pointer; }
+.wg-setup-window .wg-iconpick input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.wg-setup-window .wg-iconpick input:checked + .wg-ico { outline: 2px solid var(--wc-accent); outline-offset: 1px; }
+.wg-setup-window .wg-iconpick input:focus-visible + .wg-ico { outline: 2px dashed var(--wc-accent); outline-offset: 2px; }
+.wg-setup-window .wg-switch { display: flex; gap: 0.5rem; align-items: flex-start; }
+.wg-setup-window .wg-switch > span { display: flex; flex-direction: column; }
+.wg-setup-window .wg-num { width: 4.5rem; }
+.wg-setup-window .wg-nowrap { white-space: nowrap; }
+.wg-setup-window .wg-pad { padding: 0.5rem 0.75rem; }
+.wg-setup-window .wc-table tr.active td { background: var(--wc-accent-bg); }
+.wg-setup-window .wg-ico { width: 32px; height: 32px; border-radius: 4px; display: inline-grid; place-items: center; border: 1px solid var(--wc-line-strong); background: var(--wc-surface-2); }
+.wg-setup-window .wg-ico.sm { width: 24px; height: 24px; }
+.wg-setup-window .wg-svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.wg-setup-window .wg-ico.sm .wg-svg { width: 15px; height: 15px; }
+@container (max-width: 560px) { .wg-setup-window .wg-field { grid-template-columns: minmax(0, 1fr); } }
+
+/* ---------------------------------------------------------------- Professions window: own palette, dark in both themes */
+.wg-prof-window .window-content { padding: 0; }
+.wg-prof {
+  --wg-ink: #f2ead8; --wg-ink2: #cbbfa6; --wg-ink3: #a39780; --wg-gold: #e8c35a; --wg-pos: #5fd35f;
+  --wg-st1: #28221b; --wg-st2: #120f0c; --wg-trim: #a8873f; --wg-trimhi: #e6c873; --wg-edge: #4a3d2c;
+  color: var(--wg-ink); height: 100%; display: flex; flex-direction: column; min-height: 0;
+  background: repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.012) 0 3px, transparent 3px 7px), linear-gradient(var(--wg-st1), var(--wg-st2));
+}
+.wg-prof .wg-head { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-bottom: 1px solid color-mix(in srgb, var(--wg-trim) 45%, transparent); background: rgba(0, 0, 0, 0.25); }
+.wg-prof .wg-grow { flex: 1; min-width: 0; }
+.wg-prof .wg-ttl { margin: 0; border: none; font-family: var(--font-h1, Georgia, serif); font-size: 20px; font-weight: 700; color: var(--wg-gold); text-shadow: 0 1px 0 #000; }
+.wg-prof .wg-sub { margin: 0; color: var(--wg-ink2); font-size: 13px; }
+.wg-prof .wg-headnote { margin: 0; text-align: right; font-size: 12px; color: var(--wg-ink3); }
+.wg-prof .wg-body { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; }
+.wg-prof .wg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
+.wg-prof .wg-box { border-radius: 4px; background: linear-gradient(#1b1713, #100d0a); border: 1px solid var(--wg-edge); box-shadow: inset 0 0 0 1px #000; overflow: hidden; min-width: 0; display: flex; flex-direction: column; }
+.wg-prof .wg-box > h4 { margin: 0; padding: 6px 10px 5px; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--wg-gold); border-bottom: 1px solid color-mix(in srgb, var(--wg-trim) 40%, transparent); display: flex; align-items: center; gap: 6px; }
+.wg-prof .wg-box > h4 .r { margin-left: auto; letter-spacing: 0; text-transform: none; font-size: 11px; color: var(--wg-ink3); font-weight: 400; }
+.wg-prof .wg-card { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; }
+.wg-prof .wg-phd { display: flex; align-items: center; gap: 10px; }
+.wg-prof .wg-pname { display: block; font-size: 15px; font-weight: 600; color: var(--wg-ink); }
+.wg-prof .wg-ico { width: 30px; height: 30px; border-radius: 3px; flex: none; display: grid; place-items: center; border: 1.5px solid #c9c2b4; background: radial-gradient(circle at 35% 30%, #4b4033, #100c09 85%); }
+.wg-prof .wg-phd .wg-ico { width: 40px; height: 40px; }
+.wg-prof .wg-ico svg { width: 17px; height: 17px; fill: none; stroke: #f6eddb; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.wg-prof .wg-phd .wg-ico svg { width: 22px; height: 22px; }
+.wg-prof .wg-rank { display: inline-flex; align-items: center; height: 18px; padding: 0 7px; border-radius: 9px; font-size: 11px; font-weight: 700; color: #ffe2a0; border: 1px solid #a4802f; background: rgba(232, 195, 90, 0.12); white-space: nowrap; justify-self: start; }
+.wg-prof .wg-ladder { display: flex; gap: 3px; list-style: none; margin: 0; padding: 0; }
+.wg-prof .wg-ladder li { flex: 1; min-width: 0; text-align: center; font-size: 10.5px; line-height: 1.15; padding: 3px 2px; border-radius: 3px; border: 1px solid color-mix(in srgb, var(--wg-trim) 40%, transparent); color: var(--wg-ink3); background: rgba(0, 0, 0, 0.25); overflow: hidden; text-overflow: ellipsis; }
+.wg-prof .wg-ladder li b { display: block; font-size: 12px; color: var(--wg-ink2); }
+.wg-prof .wg-ladder li.past { color: var(--wg-ink2); }
+.wg-prof .wg-ladder li.on { border-color: var(--wg-trimhi); color: #ffe2a0; background: rgba(232, 195, 90, 0.14); }
+.wg-prof .wg-ladder li.on b { color: #ffe2a0; }
+.wg-prof .wg-kv { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.wg-prof .wg-kv li { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; min-height: 22px; }
+.wg-prof .wg-kv li > span:first-child { color: var(--wg-ink2); flex: none; }
+.wg-prof .wg-kv li b { font-weight: 600; color: var(--wg-ink); text-align: right; }
+.wg-prof .wg-tool { display: inline-flex; align-items: center; gap: 6px; }
+.wg-prof .wg-pm { width: 11px; height: 11px; flex: none; border-radius: 50%; border: 1.5px solid var(--wg-ink3); box-sizing: border-box; display: inline-block; }
+.wg-prof .wg-pm.h { background: linear-gradient(90deg, var(--wg-gold) 50%, transparent 50%); border-color: var(--wg-gold); }
+.wg-prof .wg-pm.f { background: var(--wg-gold); border-color: var(--wg-gold); }
+.wg-prof .wg-pm.e { background: var(--wg-gold); border-color: #fff4cf; box-shadow: 0 0 0 2px color-mix(in srgb, var(--wg-gold) 45%, transparent); }
+.wg-prof .wg-dim { color: var(--wg-ink3); font-weight: 400; }
+.wg-prof .wg-note { margin: 0; font-size: 12px; color: var(--wg-ink2); white-space: pre-line; }
+.wg-prof .wg-pad { padding: 8px 10px; margin: 0; }
+.wg-prof .wg-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.wg-prof .wg-gbtn { all: unset; box-sizing: border-box; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 4px; font-size: 12px; font-weight: 600; color: var(--wg-ink); border: 1px solid var(--wg-trim); background: linear-gradient(#3a2e1e, #1c160e); box-shadow: inset 0 1px 0 color-mix(in srgb, var(--wg-trimhi) 35%, transparent), 0 0 0 1px #000; }
+.wg-prof .wg-gbtn.sm { height: 24px; padding: 0 8px; font-size: 11px; }
+.wg-prof .wg-gbtn svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.wg-prof .wg-gbtn:hover { color: #fff; border-color: var(--wg-trimhi); }
+.wg-prof .wg-gbtn:focus-visible { outline: 2px solid var(--wg-trimhi); outline-offset: 1px; }
+.wg-prof .wg-list { list-style: none; margin: 0; padding: 0; }
+.wg-prof .wg-srow { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto minmax(0, 1.2fr) auto; gap: 10px; align-items: center; min-height: 40px; padding: 3px 10px; border-bottom: 1px solid rgba(255, 255, 255, 0.05); font-size: 13px; }
+.wg-prof .wg-srow:last-child { border-bottom: none; }
+.wg-prof .wg-srow.wg-unlearned { opacity: 0.75; }
+.wg-prof .wg-nm { display: flex; flex-direction: column; line-height: 1.25; min-width: 0; }
+.wg-prof .wg-nm b { font-weight: 600; }
+.wg-prof .wg-nm small { font-size: 11px; color: var(--wg-ink3); }
+.wg-prof .wg-nm small .wg-pm { width: 9px; height: 9px; }
+.wg-prof .wg-rar { font-size: 12px; color: var(--wg-ink2); min-width: 0; }
+.wg-prof .wg-empty { padding: 18px; text-align: center; border: 1px dashed var(--wg-edge); border-radius: 4px; }
+.wg-prof .wg-empty p { margin: 0.3rem 0; }
+@media (max-width: 640px) { .wg-prof .wg-srow { grid-template-columns: 30px minmax(0, 1fr) auto; } .wg-prof .wg-srow .wg-rar { grid-column: 2 / -1; } }
