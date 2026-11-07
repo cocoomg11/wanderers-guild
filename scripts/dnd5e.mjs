@@ -74,3 +74,60 @@ export function facts(actor) {
   const level = actor?.type === "character" ? Number(sys.details?.level) : NaN;
   return { name: actor?.name ?? "", type: actor?.type, level: Number.isFinite(level) && level > 0 ? level : null, pb: Number.isFinite(pb) ? pb : null, tools };
 }
+
+/** Item types that are carried in an inventory (and can be materials or results). */
+export const PHYSICAL = Object.freeze(["weapon", "equipment", "consumable", "tool", "loot", "container"]);
+
+/**
+ * The character's carried items as plain facts for the craft model: [{ id, name, qty, type, sources }]. `sources` holds the item's
+ * own UUID and where it came from (`_stats.compendiumSource`, `_stats.duplicateSource`, the older `flags.core.sourceId`).
+ * @param {any} actor
+ * @returns {import("./craft-model.mjs").InvItem[]}
+ */
+export function inventory(actor) {
+  const out = [];
+  for (const it of actor?.items ?? []) {
+    if (!PHYSICAL.includes(it.type)) continue;
+    const st = it._stats ?? {};
+    const sources = [it.uuid, st.compendiumSource, st.duplicateSource, it.flags?.core?.sourceId].filter(s => typeof s === "string" && s);
+    const q = Number(it.system?.quantity);
+    out.push({ id: it.id, name: String(it.name ?? ""), qty: Number.isFinite(q) ? q : 1, type: it.type, sources });
+  }
+  return out;
+}
+
+/**
+ * The world's coin values in its smallest coin, from CONFIG.DND5E.currencies (the Wanderer's Toolkit's three-coin economy changes
+ * them): { pp, gp, ep, sp, cp }. Falls back to the standard values.
+ * @returns {Record<string, number>}
+ */
+export function coinValues() {
+  try {
+    const list = Object.entries(D().currencies ?? {}).filter(([, c]) => Number(/** @type {any} */ (c)?.conversion) > 0);
+    if (!list.length) throw new Error("no currencies");
+    const base = Math.max(...list.map(([, c]) => Number(/** @type {any} */ (c).conversion)));
+    return Object.fromEntries(list.map(([k, c]) => [k, Math.round(base / Number(/** @type {any} */ (c).conversion))]));
+  } catch { return { pp: 1000, gp: 100, ep: 50, sp: 10, cp: 1 }; }
+}
+
+/** The actor's tool check bonus as text ("+5"), from prepared data, or "". @param {any} actor @param {string} key */
+export function toolTotal(actor, key) {
+  const t = Number(actor?.system?.tools?.[key]?.total);
+  return Number.isFinite(t) ? (t < 0 ? `−${Math.abs(t)}` : `+${t}`) : "";
+}
+
+/** A dnd5e item type's label. @param {string} type */
+export function typeLabel(type) {
+  const k = /** @type {any} */ (globalThis).CONFIG?.Item?.typeLabels?.[type];
+  return k ? loc(k) : type ? type[0].toUpperCase() + type.slice(1) : "";
+}
+
+/**
+ * What a recipe keeps of its result item: name, picture, type, rarity and price (read from the item when the GM saves).
+ * @param {any} doc an Item (or a compendium index entry, which has name, img and type only)
+ */
+export function itemSnapshot(doc) {
+  const sys = doc?.system ?? {};
+  const price = sys.price && typeof sys.price === "object" ? { value: Number(sys.price.value) || 0, denomination: String(sys.price.denomination || "gp") } : null;
+  return { uuid: String(doc?.uuid ?? ""), name: String(doc?.name ?? ""), img: String(doc?.img ?? ""), type: String(doc?.type ?? ""), rarity: String(sys.rarity ?? ""), price };
+}

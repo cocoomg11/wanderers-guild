@@ -7,17 +7,22 @@ import { addStarter, upsert, normalizeProfessions } from "../scripts/professions
 import { defaultRanks, RARITIES } from "../scripts/ranks-model.mjs";
 
 const defs = upsert(addStarter(undefined, ["smith", "herb", "cook"]).list, { name: "<b>Evil</b>", kind: "crafting", tools: ["smith"], notes: "a & b" }).list;
-const v = C.professionsView({ name: "Ma<ren>", level: 5, pb: 3, tools: { smith: 1, cook: 1 } }, defs, undefined, { showUnlearned: true });
+const v = C.professionsView({ name: "Ma<ren>", level: 5, pb: 3, tools: { smith: 1, cook: 1 } }, defs, undefined, { showUnlearned: true, crafting: true });
 
 test("Professions window: cards, rows, placeholders, escaping", () => {
   const html = PV.professionsHTML(v);
   assert.ok(html.startsWith(`<div class="wg-prof">`));
   assert.ok(html.includes("Ma&lt;ren&gt;") && !html.includes("Ma<ren>"));
   assert.ok(html.includes("&lt;b&gt;Evil&lt;/b&gt;") && html.includes("a &amp; b"));
-  assert.equal((html.match(/data-action="wgComing"/g) ?? []).length, 2 * 2 + 0, "Smithing and Evil: Craft + Recipes; Cooking (secondary) has none");
+  assert.equal((html.match(/data-action="wgCraft"/g) ?? []).length, 2 * 2 + 0, "Smithing and Evil: Craft + Recipes; Cooking (secondary) has none");
+  assert.ok(html.includes(`data-what="recipes"`));
+  const off = PV.professionsHTML(C.professionsView({ name: "M", pb: 3, tools: { smith: 1, herb: 1 } }, defs, undefined, {}));
+  assert.ok(!off.includes("wgCraft"), "Crafting off: no Craft or Recipes buttons");
+  assert.equal((off.match(/data-action="wgComing"/g) ?? []).length, 1, "Gather stays a placeholder");
+  assert.equal(PV.actionOf("gather"), "wgComing");
   assert.ok(html.includes(`aria-current="step"`));
   assert.ok(html.includes("Not learned"));
-  assert.ok(html.includes(PV.COMING));
+  assert.ok(html.includes("Crafting results are posted to chat"));
   assert.ok(!/wc-r\d/.test(html), "no literal core revision");
 });
 

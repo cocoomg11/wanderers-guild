@@ -1,8 +1,8 @@
 {
   "id": "wanderers-guild",
   "title": "Wanderer's Guild",
-  "description": "Professions for dnd5e built on tool proficiencies: a character has every profession whose tool they are proficient with, and its rank follows the proficiency bonus. A GM setup window for the definitions and rank names, and a Professions window per character.",
-  "version": "0.1.0",
+  "description": "Professions for dnd5e built on tool proficiencies: a character has every profession whose tool they are proficient with, and its rank follows the proficiency bonus. Recipes and crafting with the linked tool check, on rules the GM fills in. A GM setup window, a Professions window and a Crafting window per character.",
+  "version": "0.2.0",
   "authors": [
     {
       "name": "cocoomg11"
@@ -27,12 +27,12 @@
       {
         "id": "wayfarers-toolkit",
         "type": "module",
-        "reason": "Optional. In a later version, crafting prices can use the toolkit's three-coin economy (read through its API)."
+        "reason": "Optional. Crafting prices can show and charge the toolkit's three-coin economy (read through its API; setup › Settings)."
       },
       {
         "id": "item-piles",
         "type": "module",
-        "reason": "Optional. Later versions hand crafted and gathered items out with Item Piles when it is active."
+        "reason": "Optional. A later version may hand gathered items out with Item Piles when it is active."
       }
     ]
   },
@@ -53,7 +53,7 @@
   ],
   "url": "https://github.com/cocoomg11/wanderers-guild",
   "manifest": "https://github.com/cocoomg11/wanderers-guild/releases/latest/download/module.json",
-  "download": "https://github.com/cocoomg11/wanderers-guild/releases/download/v0.1.0/module.zip",
+  "download": "https://github.com/cocoomg11/wanderers-guild/releases/download/v0.2.0/module.zip",
   "bugs": "https://github.com/cocoomg11/wanderers-guild/issues",
   "license": "LICENSE",
   "readme": "README.md",

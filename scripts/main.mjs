@@ -11,6 +11,9 @@ import * as Professions from "./professions.mjs";
 import * as Setup from "./setup.mjs";
 import * as Data from "./data.mjs";
 import * as D5 from "./dnd5e.mjs";
+import * as Crafting from "./crafting.mjs";
+import * as CraftLeader from "./craft-leader.mjs";
+import { context, assessIn } from "./craft-read.mjs";
 import { registration, registerWith, SATCHEL_ID } from "./satchel-model.mjs";
 
 let isReady = false;
@@ -30,6 +33,27 @@ export const API = {
   get setup() { return F.on("professions") ? (/** @type {string | undefined} */ page) => (gm() ? Setup.open(page) : undefined) : undefined; },
   /** The world's definitions and rank table, normalized (read only). Undefined when off. */
   get definitions() { return F.on("professions") ? { professions: () => Data.professions(), ranks: () => Data.ranks() } : undefined; },
+  /**
+   * Crafting (experimental): open the window, read the world's recipes and rules, a character's known recipes and one recipe's
+   * assessment. Learning and forgetting go through the active GM's client. Undefined when the Crafting feature is off.
+   */
+  get crafting() {
+    if (!F.on("crafting")) return undefined;
+    const actorOf = (/** @type {any} */ a) => (typeof a === "string" ? game.actors?.get(a) ?? fromUuidSync(a) : a);
+    return {
+      open: (/** @type {any} */ actor, /** @type {string} */ professionId, /** @type {"craft" | "recipes"} */ mode = "craft") => Crafting.open(actor, professionId, mode),
+      recipes: () => Data.recipes(),
+      rules: () => Data.rules(),
+      known: (/** @type {any} */ actor) => { const a = actorOf(actor); return a && Professions.canView(a) ? Data.known(a) : undefined; },
+      assess: (/** @type {any} */ actor, /** @type {string} */ recipeId) => {
+        const a = actorOf(actor); if (!a || !Professions.canView(a)) return undefined;
+        const ctx = context(a); const r = ctx.book.list.find(x => x.id === recipeId);
+        return r ? assessIn(ctx, r) : undefined;
+      },
+      learn: (/** @type {any} */ actor, /** @type {string} */ recipeId) => { const a = actorOf(actor); return !!a && leader.request("learnRecipe", { actor: a.uuid, recipe: recipeId }); },
+      forget: (/** @type {any} */ actor, /** @type {string} */ recipeId) => { const a = actorOf(actor); return gm() && !!a && leader.request("forgetRecipe", { actor: a.uuid, recipe: recipeId }); }
+    };
+  },
   get isReady() { return isReady; },
   features: F
 };
@@ -47,10 +71,16 @@ Hooks.once("init", () => {
     Setup.registerHooks();
   }
   if (F.on("sheetButton")) Professions.registerSheetButton();
+  if (F.on("crafting")) {
+    Professions.setCraftingOpener((actor, professionId, mode) => Crafting.open(actor, professionId, mode));
+    Crafting.registerHooks();
+    CraftLeader.registerCardHook();
+  }
 });
 
 Hooks.once("ready", () => {
   isReady = true;
+  if (F.on("crafting")) CraftLeader.registerHandlers();
   leader.start();
   if (!D5.isDnd5e() && game.user?.isGM) ui.notifications.warn(`${TITLE} needs the dnd5e system; this world runs ${game.system?.id}.`);
   // Optional: show up in the Wanderer's Satchel hub when it is installed.

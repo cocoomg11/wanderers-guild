@@ -5,23 +5,51 @@ import { F, S, REQUESTS, RECORDS } from "../scripts/core.mjs";
 import { ID, HOOKS } from "../scripts/const.mjs";
 import { normalizeProfessions } from "../scripts/professions-model.mjs";
 import { normalizeRanks } from "../scripts/ranks-model.mjs";
+import { normalizeRecipes } from "../scripts/recipes-model.mjs";
+import { normalizeRules } from "../scripts/craft-model.mjs";
+import { readRequest } from "../vendor/wanderers-core/index.mjs";
+
+const RID = "abcdefgh12345678-1-mw5o4v5z";
+const req = (kind, data) => readRequest(REQUESTS, { action: "request", kind, rid: RID, data });
+
+test("request schemas: what each kind accepts and refuses", () => {
+  const actor = "Actor.abcdefghij123456";
+  assert.equal(req("learnRecipe", { actor, recipe: "blade" }).ok, true);
+  assert.equal(req("learnRecipe", { actor, recipe: "blade", user: "x" }).ok, false, "no payload user field");
+  assert.equal(req("learnRecipe", { actor, recipe: "Bad Id" }).ok, false);
+  assert.equal(req("learnRecipe", { actor: "not a uuid", recipe: "blade" }).ok, false);
+  assert.equal(REQUESTS.forgetRecipe.from, "gm"); assert.equal(REQUESTS.craftDecide.from, "gm");
+  assert.equal(REQUESTS.learnRecipe.from, undefined); assert.equal(REQUESTS.craft.from, undefined);
+  assert.equal(req("craft", { actor, recipe: "blade", roll: "abcdefghij123456", helpers: 0 }).ok, true);
+  assert.equal(req("craft", { actor, recipe: "blade", roll: "abcdefghij123456", helpers: 1.5 }).ok, false);
+  assert.equal(req("craft", { actor, recipe: "blade", roll: "abcdefghij123456", helpers: 99 }).ok, false);
+  assert.equal(req("craft", { actor, recipe: "blade", roll: "x", helpers: 0 }).ok, false, "the roll is a message id");
+  assert.equal(req("craft", { actor, recipe: "blade", roll: "abcdefghij123456", helpers: 0, total: 30 }).ok, false, "no total from the client");
+  assert.equal(req("craftDecide", { message: "abcdefghij123456", choice: "approve" }).ok, true);
+  assert.equal(req("craftDecide", { message: "abcdefghij123456", choice: "explode" }).ok, false);
+});
 
 // core.mjs binds core to this module. These definitions throw on a typo (duplicate key, bad type, a need that isn't a feature), so
 // importing them here catches the mistake in CI instead of in a live world.
 test("features, settings and requests are well formed", () => {
-  assert.deepEqual(F.FEATURES.map(f => f.id), ["professions", "sheetButton"]);
+  assert.deepEqual(F.FEATURES.map(f => f.id), ["professions", "sheetButton", "crafting"]);
+  assert.deepEqual(F.FEATURES.find(f => f.id === "crafting").needs, ["professions"]);
   assert.ok(F.FEATURES.every(f => f.key === `feature-${f.id}`));
   assert.deepEqual(F.FEATURES.find(f => f.id === "sheetButton").needs, ["professions"]);
-  assert.deepEqual(S.ROWS.map(r => r.key), ["professionList", "rankTable", "showUnlearned", "debugLog"]);
-  assert.deepEqual(Object.keys(REQUESTS), []);
+  assert.deepEqual(S.ROWS.map(r => r.key), ["professionList", "rankTable", "showUnlearned", "recipeBook", "craftRules", "playersLearn", "craftApproval", "worldCoins", "debugLog"]);
+  assert.deepEqual(Object.keys(REQUESTS), ["learnRecipe", "forgetRecipe", "craft", "craftDecide"]);
+  assert.equal(HOOKS.crafted, `${ID}.crafted`);
   assert.equal(HOOKS.ready, `${ID}.ready`);
-  assert.deepEqual([...RECORDS], ["professionList", "rankTable", "windowPlacement"]);
+  assert.deepEqual([...RECORDS], ["professionList", "rankTable", "recipeBook", "craftRules", "windowPlacement"]);
 });
 
 test("record defaults are what the normalizers give for nothing stored", () => {
   const row = k => S.ROWS.find(r => r.key === k);
   assert.deepEqual(row("professionList").default, normalizeProfessions(undefined));
   assert.deepEqual(row("rankTable").default, normalizeRanks(undefined));
+  assert.deepEqual(row("recipeBook").default, normalizeRecipes(undefined));
+  assert.deepEqual(row("craftRules").default, normalizeRules(undefined));
+  assert.deepEqual([row("playersLearn").default, row("craftApproval").default, row("worldCoins").default], [true, false, false]);
   assert.ok(S.ROWS.filter(r => !r.hidden).every(r => r.tab === "settings" && r.label && r.hint));
 });
 

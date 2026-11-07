@@ -1,8 +1,8 @@
 # Wanderer's Guild
 
-Professions for dnd5e, built on tool proficiencies. A character has every profession whose tool they are proficient with (no limit), and a profession's rank follows the character's proficiency bonus, from +2 at level 1 to +6. The GM names the professions and the ranks; players see theirs in a Professions window.
+Professions for dnd5e, built on tool proficiencies. A character has every profession whose tool they are proficient with (no limit), and a profession's rank follows the character's proficiency bonus, from +2 at level 1 to +6. The GM names the professions and the ranks; players see theirs in a Professions window. Characters learn recipes and craft them with the profession's tool check, on crafting rules the GM fills in.
 
-A [Foundry VTT](https://foundryvtt.com) module (v13 and v14) for the dnd5e system (6.x). What changed in each version: [CHANGELOG](CHANGELOG.md). Version 0.1 is the first slice: professions and ranks. Crafting, recipes and gathering come in later versions (their buttons are placeholders for now).
+A [Foundry VTT](https://foundryvtt.com) module (v13 and v14) for the dnd5e system (6.x). What changed in each version: [CHANGELOG](CHANGELOG.md). Version 0.2 adds recipes and crafting; gathering comes in a later version (its button is a placeholder for now).
 
 ## Contents
 
@@ -21,7 +21,7 @@ A [Foundry VTT](https://foundryvtt.com) module (v13 and v14) for the dnd5e syste
 
 - Foundry VTT 13 or 14 (checked on 14.370).
 - The dnd5e system, 6.0 or later (checked on 6.0.6).
-- Optional: [Wanderer's Toolkit](https://github.com/cocoomg11/wayfarers-toolkit) (a later version uses its three-coin economy for prices) and Item Piles. Neither is needed.
+- Optional: [Wanderer's Toolkit](https://github.com/cocoomg11/wayfarers-toolkit) (crafting prices can use its three-coin economy) and Item Piles. Neither is needed.
 
 ## Install
 
@@ -35,6 +35,7 @@ In Foundry's **Add-on Modules › Install Module**, paste the manifest URL:
 2. Open **Game Settings › Configure Settings › Wanderer's Guild › Open setup**.
 3. On the **Professions** page press **Add starter set** (one plain profession per artisan's tool and the herbalism kit), or **Add profession** to make your own. Link each profession to one or more tools.
 4. Open a character's sheet and press the hammer button in its header: the **Professions** window lists what the character has, with the rank and the rank ladder.
+5. For crafting: fill in **Crafting rules** from your table's rules (nothing is filled in for you), add **Recipes** (drag the item each one makes onto the editor), then press **Craft** on a crafting profession's card. See [docs/crafting.md](docs/crafting.md).
 
 <!-- screenshot: the Professions window, two cards and the Other professions list -->
 
@@ -43,10 +44,12 @@ In Foundry's **Add-on Modules › Install Module**, paste the manifest URL:
 | Tool | Who | What it does |
 | --- | --- | --- |
 | Professions window | owners, observers, GM | One character's professions: a card per crafting or gathering profession (rank, ladder, linked tool, highest rarity, next rank), the other professions as a list, and (switch) the ones not learned yet. Read only. |
-| Setup window | GM | Professions (definitions), Ranks (rank names and rarities per proficiency bonus), Settings, Health check, Data (remove the module's data). |
+| Setup window | GM | Professions (definitions), Ranks (rank names and rarities per proficiency bonus), Recipes, Crafting rules, Settings, Health check, Data (remove the module's data). |
 | Sheet button | owners, observers | The hammer button in the header of dnd5e character sheets. |
+| Crafting window | owners (observers look), GM | Per character and profession. **Craft**: recipes with materials have / need, rank check, tool check and DC, time (for reference only: the calendar is never advanced), cost; Craft rolls the tool check and the active GM's client makes the item. **Recipes**: learn (players, when allowed), teach and forget (GM). |
+| Recipes, Crafting rules | GM | Setup window pages: the world's recipes, and every crafting number (empty until you fill them in), each with Import / export JSON. |
 
-How it works, in detail: [docs/professions.md](docs/professions.md).
+How it works, in detail: [docs/professions.md](docs/professions.md) and [docs/crafting.md](docs/crafting.md).
 
 ## Settings
 
@@ -56,12 +59,16 @@ Feature switches (Game Settings › Wanderer's Guild; each reloads Foundry):
 | --- | --- | --- |
 | Feature: Professions | on | no windows, no setup menu, `api.open` / `api.setup` / `api.definitions` / `api.professionsOf` are undefined |
 | Feature: Sheet button | on | no header button on character sheets (also off when Professions is off) |
+| Feature: Crafting | on | no Craft or Recipes buttons, no Crafting window, no Recipes or Crafting rules pages, no crafting requests or chat card buttons; `api.crafting` is undefined (also off when Professions is off) |
 
 On the setup window's **Settings** page (instant):
 
 | Setting | Default | What it does |
 | --- | --- | --- |
 | Show professions not learned yet | on | The Professions window also lists the world's other professions and the tool each one needs. |
+| Players learn recipes themselves | on | A player can learn a recipe of their profession that their rank allows. Off: only a GM teaches. |
+| GM approves each craft | off | After the tool check a GM card with Approve / Refuse decides; nothing is made or used up until then. Off: the result follows the roll (a craft with no DC always asks the GM). |
+| Prices in the world's coins | off | Prices in Wanderer's Toolkit's coins (when it is active), paid through the toolkit. Off: book values. |
 | Debug logging | off | Writes the module's decisions to the browser console. |
 
 ## Public API and hooks
@@ -73,16 +80,20 @@ On the setup window's **Settings** page (instant):
 | `version` | stable | The installed version. |
 | `open(actor?)` | experimental | Opens the Professions window for an Actor (or its id or UUID); without one, your assigned character or the selected token's actor. Returns the window, or undefined. |
 | `professionsOf(actor)` | experimental | The model the window draws (`{ name, subtitle, cards, others, unlearned, … }`), read only; undefined when you can't observe the actor. |
-| `setup(page?)` | experimental | Opens the GM setup window, on `"professions"`, `"ranks"`, `"settings"`, `"health"` or `"data"`. GM only. |
+| `setup(page?)` | experimental | Opens the GM setup window, on `"professions"`, `"ranks"`, `"recipes"`, `"crafting"`, `"settings"`, `"health"` or `"data"`. GM only. |
 | `definitions` | experimental | `{ professions(), ranks() }`: the world's definitions and rank table, normalized. |
 | `health({ timeoutMs }?)` | stable | Read-only report: `[{ title, lines: [{ level, text, fix? }] }]`, `level` is `ok`, `warn`, `bad`, `off` or `info`. GM only (players get `[]`). |
-| `cleanup` | stable | `{ plan(), dryRun(), remove(pick, "REMOVE") }`: counts what the module stored; removes the picked categories (`professions`, `ranks`, `settings`) after the word REMOVE (GM). |
+| `cleanup` | stable | `{ plan(), dryRun(), remove(pick, "REMOVE") }`: counts what the module stored; removes the picked categories (`professions`, `ranks`, `recipes`, `rules`, `known`, `cards`, `settings`) after the word REMOVE (GM). |
+| `crafting` | experimental | `{ open(actor, professionId, mode?), recipes(), rules(), known(actor), assess(actor, recipeId), learn(actor, recipeId), forget(actor, recipeId) }`: opens the Crafting window (`mode` `"craft"` or `"recipes"`); the world's recipes and crafting rules (normalized, read only); a character's known recipes and one recipe's assessment (what the window shows) when you can observe it; asks the active GM's client to learn (the same checks as the Learn button) or forget (GM) a recipe, returning whether the request was sent. Undefined when *Feature: Crafting* is off. |
 | `isReady` | stable | Whether our ready hook ran. |
 | `features` | experimental | The feature registry (`FEATURES`, `on(id)`, `list()`). |
 
 `open`, `professionsOf`, `setup` and `definitions` are undefined when *Feature: Professions* is off.
 
-**Hook** `wanderers-guild.ready` (stable): fired once, with the api, in our `ready` hook.
+**Hooks**
+
+- `wanderers-guild.ready` (stable): fired once, with the api, in our `ready` hook.
+- `wanderers-guild.crafted` (experimental): fired on the active GM's client after a craft is decided, with ids only: `{ actorId, recipeId, success, messageId }` (the chat card). Not fired for refused crafts or errors.
 
 Stable members keep their name and shape within a major version; experimental ones may change in any release.
 
@@ -90,16 +101,21 @@ With the Wanderer's Satchel installed, the module registers itself there (Open =
 
 ## Data Wanderer's Guild writes
 
-- World settings under `wanderers-guild.*`: the feature switches, the switches above, `professionList` (the definitions, at most 100) and `rankTable` (at most 12 rows). Every client reads these, so they hold nothing secret: notes on a profession are shown to players.
+- World settings under `wanderers-guild.*`: the feature switches, the switches above, `professionList` (the definitions, at most 100), `rankTable` (at most 12 rows), `recipeBook` (the recipes, at most 300) and `craftRules`. Every client reads these, so they hold nothing secret: notes on a profession or recipe are shown to players.
 - A client setting, `windowPlacement` (where this browser last left the windows).
-- Nothing on actors, items, scenes, journals or chat messages: a character's professions are worked out from its tool proficiencies each time.
+- On characters: `flags.wanderers-guild.recipes` (known recipe ids, at most 200), written only by the active GM's client. A character's professions are still worked out from its tool proficiencies each time.
+- Crafting changes the character's items (the crafted item, the materials used up) and coin, through the active GM's client.
+- Chat: craft cards and short notices (`flags.wanderers-guild.craft` / `.notice`) and a mark on tool check rolls used for a craft (`flags.wanderers-guild.craftRoll` / `.rollUsed`).
 
-Removing it: the setup window's **Data** page, or `api.cleanup` (a dry-run `plan()`, then `remove({ professions: true, ranks: true, settings: true }, "REMOVE")`).
+Removing it: the setup window's **Data** page, or `api.cleanup` (a dry-run `plan()`, then `remove({ professions: true, ranks: true, recipes: true, rules: true, known: true, cards: true, settings: true }, "REMOVE")`). Crafted items stay: they are ordinary items.
 
 ## Troubleshooting
 
 - **A character shows no professions.** It needs proficiency (not half proficiency) with one of a profession's linked tools; check the character's Tools on the dnd5e sheet and the links on the setup window's Professions page.
 - **The rank looks wrong.** The rank is the proficiency bonus the dnd5e sheet shows (effects that change it change the rank too). The rank names and rarities are on the setup window's Ranks page.
+- **Craft is greyed out.** The line next to it says why: the recipe is unknown, the rank is too low, materials or coin are missing, or no GM is connected.
+- **Every craft waits for the GM.** No DC is set: give the recipe a DC, or fill in a base DC or the rarity table on the Crafting rules page.
+- **The time says "not set".** Fill in the time rules on the Crafting rules page (or the recipe's own time). The time is only shown; the calendar never moves.
 - **Something else.** Run the setup window's **Health** page and look for warnings.
 
 ## Development

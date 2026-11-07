@@ -1,6 +1,6 @@
 {
   "name": "wanderers-guild",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Tests and checks for the Wanderer's Guild Foundry VTT module (the module itself needs no install step).",
   "type": "module",

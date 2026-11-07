@@ -19,13 +19,17 @@ const OPEN = new Map();
 let openSetup = () => undefined;
 /** @param {() => unknown} fn */
 export function setSetupOpener(fn) { openSetup = fn; }
+/** Opens the Crafting window (set by main.mjs when the Crafting feature is on). @type {((actor: any, professionId: string, mode: "craft" | "recipes") => unknown) | null} */
+let openCrafting = null;
+/** @param {(actor: any, professionId: string, mode: "craft" | "recipes") => unknown} fn */
+export function setCraftingOpener(fn) { openCrafting = fn; }
 
 /** Whether this user may see the actor's professions. @param {any} actor */
 export const canView = actor => !!actor && (game.user?.isGM || actor.testUserPermission?.(game.user, "OBSERVER"));
 
 /** The model for one actor (also `api.professionsOf(actor)`). @param {any} actor */
 export function viewOf(actor) {
-  return professionsView(D5.facts(actor), S.get("professionList"), S.get("rankTable"), { labels: D5.labels(), showUnlearned: !!S.get("showUnlearned"), isGM: !!game.user?.isGM });
+  return professionsView(D5.facts(actor), S.get("professionList"), S.get("rankTable"), { labels: D5.labels(), showUnlearned: !!S.get("showUnlearned"), isGM: !!game.user?.isGM, crafting: !!openCrafting });
 }
 
 const Base = RememberedWindow(foundry.applications.api.ApplicationV2, { moduleId: ID, key: "professions" });
@@ -47,6 +51,7 @@ export class ProfessionsApp extends Base {
     position: { width: 760, height: 720 },
     actions: {
       wgComing: ProfessionsApp.#coming,
+      wgCraft: ProfessionsApp.#craft,
       wgSetup: () => openSetup()
     }
   };
@@ -72,6 +77,12 @@ export class ProfessionsApp extends Base {
 
   /** @param {any} options */
   _onClose(options) { super._onClose?.(options); if (OPEN.get(this.actor?.id) === this) OPEN.delete(this.actor.id); }
+
+  /** @this {ProfessionsApp} @param {PointerEvent} _event @param {HTMLElement} target */
+  static #craft(_event, target) {
+    const prof = target?.dataset?.prof ?? "";
+    openCrafting?.(this.actor, prof, target?.dataset?.what === "recipes" ? "recipes" : "craft");
+  }
 
   /** @param {PointerEvent} _event @param {HTMLElement} target */
   static #coming(_event, target) {

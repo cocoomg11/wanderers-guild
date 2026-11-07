@@ -8,8 +8,10 @@ import { esc } from "./const.mjs";
 /** An inline stroke icon. @param {string} d */
 const svg = d => `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="${esc(d)}"></path></svg>`;
 
-/** What the placeholder buttons say. */
+/** What the placeholder buttons say (Gather, until gathering is built). */
 export const COMING = "Coming in a later version.";
+/** The data-action of an action button: Craft and Recipes open the Crafting window; Gather is still a placeholder. @param {string} id */
+export const actionOf = id => (id === "craft" || id === "recipes" ? "wgCraft" : "wgComing");
 
 /** @typedef {ReturnType<typeof import("./character-model.mjs").professionsView>} View */
 /** @typedef {View["cards"][number]} Prof */
@@ -25,7 +27,7 @@ function ladderHTML(p) {
 function actionsHTML(p, small = true) {
   if (!p.actions.length) return "";
   return `<div class="wg-actions">${p.actions.map(a =>
-    `<button type="button" class="wg-gbtn${small ? " sm" : ""}" data-action="wgComing" data-what="${esc(a.id)}" data-prof="${esc(p.id)}" title="${esc(COMING)}">${svg(a.icon)}${esc(a.label)}</button>`).join("")}</div>`;
+    `<button type="button" class="wg-gbtn${small ? " sm" : ""}" data-action="${actionOf(a.id)}" data-what="${esc(a.id)}" data-prof="${esc(p.id)}"${actionOf(a.id) === "wgComing" ? ` title="${esc(COMING)}"` : ""}>${svg(a.icon)}${esc(a.label)}</button>`).join("")}</div>`;
 }
 
 /** @param {{ mark: string, label: string, word?: string }} t */
@@ -76,6 +78,6 @@ export function professionsHTML(v) {
   const others = v.others.length ? `<section class="wg-box"><h4>Other professions<span class="r">no limit</span></h4><ul class="wg-list">${v.others.map(rowHTML).join("")}</ul></section>` : "";
   const unlearned = v.unlearned.length ? `<section class="wg-box"><h4>Not learned<span class="r">needs a tool proficiency</span></h4><ul class="wg-list">${v.unlearned.map(rowHTML).join("")}</ul></section>` : "";
   const empty = none ? `<div class="wg-empty"><p>No professions yet.</p><p class="wg-dim">A profession is learned with a tool proficiency (from a background, class, species or training).${v.hiddenUnlearned ? ` This world has ${v.hiddenUnlearned} to choose from.` : ""}</p></div>` : "";
-  const recent = `<section class="wg-box"><h4>Recent<span class="r">crafting and gathering checks</span></h4><p class="wg-dim wg-pad">${esc(COMING)}</p></section>`;
+  const recent = `<section class="wg-box"><h4>Recent<span class="r">crafting and gathering checks</span></h4><p class="wg-dim wg-pad">Crafting results are posted to chat. A history here is ${esc(COMING.toLowerCase())}</p></section>`;
   return `<div class="wg-prof">${head}<main class="wg-body">${empty}${cards}${others}${unlearned}${recent}</main></div>`;
 }

@@ -8,16 +8,19 @@ import { esc, TITLE } from "./const.mjs";
 import { KINDS, KIND_KEYS, ICONS, ICON_KEYS, ACTIONS, ACTION_KEYS, KIND_ACTIONS, DEFAULT_CHECK, NAME_MAX, NOTES_MAX, PROFESSIONS_MAX } from "./professions-model.mjs";
 import { RANKS_MAX, BONUS_MIN, BONUS_MAX, RANK_NAME_MAX, signed } from "./ranks-model.mjs";
 
+/** @type {ReadonlyArray<{ id: string, label: string, icon: string, feature?: string }>} */
 export const NAV = Object.freeze([
   { id: "professions", label: "Professions", icon: "fa-solid fa-hammer" },
   { id: "ranks", label: "Ranks", icon: "fa-solid fa-stairs" },
+  { id: "recipes", label: "Recipes", icon: "fa-solid fa-scroll", feature: "crafting" },
+  { id: "crafting", label: "Crafting rules", icon: "fa-solid fa-scale-balanced", feature: "crafting" },
   { id: "settings", label: "Settings", icon: "fa-solid fa-sliders" },
   { id: "health", label: "Health", icon: "fa-solid fa-heart-pulse" },
   { id: "data", label: "Data", icon: "fa-solid fa-database" }
 ]);
 export const PAGE_IDS = Object.freeze(NAV.map(n => n.id));
-/** A known page or the first. @param {unknown} p */
-export const pickPage = p => (PAGE_IDS.includes(String(p)) ? String(p) : PAGE_IDS[0]);
+/** A known page (and shown: `hidden` lists pages of features that are off) or the first. @param {unknown} p @param {string[]} [hidden] */
+export const pickPage = (p, hidden = []) => (PAGE_IDS.includes(String(p)) && !hidden.includes(String(p)) ? String(p) : PAGE_IDS[0]);
 
 /** Sidebar keys: the next index for ArrowUp/ArrowDown/Home/End, or -1. @param {string} key @param {number} i @param {number} n */
 export function nextNavIndex(key, i, n) {
@@ -32,10 +35,10 @@ const svg = (/** @type {string} */ d) => `<svg class="wg-svg" viewBox="0 0 24 24
 
 /**
  * The shell around a page.
- * @param {string} page @param {string} body @param {{ version?: string, dots?: Record<string, string> }} [o]
+ * @param {string} page @param {string} body @param {{ version?: string, dots?: Record<string, string>, hidden?: string[] }} [o]
  */
 export function shellHTML(page, body, o = {}) {
-  const nav = NAV.map(n => navItem({ label: n.label, page: n.id, icon: n.icon, active: n.id === page, tabindex: n.id === page ? 0 : -1, ...(o.dots?.[n.id] ? { dot: o.dots[n.id] } : {}) })).join("");
+  const nav = NAV.filter(n => !(o.hidden ?? []).includes(n.id)).map(n => navItem({ label: n.label, page: n.id, icon: n.icon, active: n.id === page, tabindex: n.id === page ? 0 : -1, ...(o.dots?.[n.id] ? { dot: o.dots[n.id] } : {}) })).join("");
   return `<div class="wc-shell wg-shell"><nav class="wc-side" aria-label="${esc(TITLE)} setup sections">${nav}<span class="wc-side-foot">${esc(TITLE)} <code>${esc(o.version ?? "")}</code></span></nav>
     <main class="wc-main wg-main">${body}</main></div>`;
 }
@@ -101,7 +104,7 @@ export function editorHTML(p, m) {
       <label class="wg-field"><span>Kind</span><select name="kind">${KIND_KEYS.map(k => opt(k, KINDS[k].label, k === kind)).join("")}</select></label>
       <p class="wc-hint">${KIND_KEYS.map(k => `<b>${esc(KINDS[k].label)}</b>: ${esc(KINDS[k].hint)}`).join(" ")}</p>
       <fieldset class="wg-fieldset"><legend>Actions</legend>${ACTION_KEYS.map(a => `<label class="wg-check"><input type="checkbox" name="actions" value="${a}"${actions.includes(a) ? " checked" : ""}> ${esc(ACTIONS[a].label)}</label>`).join("")}
-        <p class="wc-hint">Craft, Recipes and Gather are placeholders in this version.</p></fieldset>
+        <p class="wc-hint">Craft and Recipes open the Crafting window (feature Crafting); Gather is a placeholder in this version.</p></fieldset>
       <fieldset class="wg-fieldset"><legend>Linked tools (proficiency with any one of them)</legend><div class="wg-checks">${toolBoxes}${missing}</div>
         <p class="wc-hint">None ticked: everyone has this profession, no tool needed.</p></fieldset>
       <label class="wg-field"><span>Gathering check</span><select name="check">${m.skills.map(s => opt(s.key, s.label, s.key === check)).join("")}${m.skills.some(s => s.key === check) ? "" : opt(check, check, true)}</select></label>

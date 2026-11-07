@@ -1,6 +1,6 @@
 # Professions
 
-How Wanderer's Guild decides what a character can do, and how the GM sets it up. Version 0.1 covers professions and ranks; crafting, recipes and gathering are later versions.
+How Wanderer's Guild decides what a character can do, and how the GM sets it up. Version 0.2 adds recipes and crafting ([crafting.md](crafting.md)); gathering is a later version.
 
 ## Professions come from tool proficiencies
 
@@ -26,15 +26,15 @@ The **rank table** (setup window › Ranks) gives each bonus a name and the high
 
 Change the names and rarities to suit the table, add rows (one per bonus, up to 12; a bonus from +1 to +20) or remove them. A character whose bonus is below the lowest row has no rank yet; a bonus between two rows uses the lower one. The "Next rank" line names the level the character reaches the next row at, when its bonus is the standard one for its level.
 
-The rarity is shown for reference in 0.1; crafting (a later version) will use it.
+Crafting uses the rarity: a recipe whose item is of a higher rarity needs a higher rank (see [crafting.md](crafting.md)). Mundane items need no rank.
 
 ## Kinds
 
-- **Crafting**: shown as a card with Craft and Recipes buttons.
+- **Crafting**: shown as a card with Craft and Recipes buttons (they open the Crafting window; *Feature: Crafting*).
 - **Gathering**: shown as a card with a Gather button and the check it uses (Survival by default; pick another skill in the editor). The DC will come from the GM per region in a later version.
 - **Secondary**: shown in the *Other professions* list; tick which actions it offers.
 
-The buttons say "Coming in a later version" for now.
+Gather says "Coming in a later version" for now.
 
 ## Setting up (GM)
 
@@ -42,7 +42,8 @@ Game Settings › Configure Settings › Wanderer's Guild › **Open setup**, or
 
 - **Professions**: add, edit, reorder and delete professions. **Add starter set** adds one plain profession per artisan's tool and the herbalism kit the world knows (Smithing, Alchemy, Herbalism, Cooking, …), skipping tools a profession already links. Everything is editable afterwards.
 - **Ranks**: the rank table above. **Reset to defaults** puts the default names and rarities back.
-- **Settings**: *Show professions not learned yet*, *Debug logging*, and **Reset window positions**.
+- **Recipes** and **Crafting rules**: see [crafting.md](crafting.md).
+- **Settings**: *Show professions not learned yet*, *Players learn recipes themselves*, *GM approves each craft*, *Prices in the world's coins*, *Debug logging*, and **Reset window positions**.
 - **Health**: the read-only check (no professions, links to tools the world doesn't have, rank rarities that go down, player characters with no profession).
 - **Data**: remove what the module stored, after a dry run and the word REMOVE.
 

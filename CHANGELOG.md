@@ -2,6 +2,43 @@
 
 All notable changes to Wanderer's Guild. Versions follow the `version` in `module.json`.
 
+## 0.2.0 (unreleased)
+
+Second slice: recipes and crafting. Gathering is still a placeholder.
+
+- **Crafting rules are your numbers.** A new setup page, *Crafting rules*, holds every number crafting uses: time from the item's price (hours per gp, rounding, a working day), the coin cost as a share of the price (and whether it is taken from the crafter), time / cost / DC per rarity for magic items, a consumable percentage, a base DC, what a failure does to the materials, helpers, and a time percentage per rank. Nothing ships filled in (no rulebook figures): empty fields read "not set", and a craft with no DC anywhere waits for the GM. Import / export JSON to paste or keep a rules set.
+- **Recipes** (setup › Recipes): what it makes (drag an item; its name, picture, type, rarity and price are kept), profession, section, rarity override, materials by item or by name, optional DC / time / cost, *known by everyone with the profession*, a note. Refresh from items; Import / export JSON (merge by id). At most 300 per world.
+- **Crafting window** per character and profession, opened by the card's Craft and Recipes buttons (*Feature: Crafting*, on by default). **Craft**: the recipe list by rarity colour and status (can craft / missing something / needs a higher rank / unknown), search and a *Can craft* filter; the selected recipe's materials have / need, tool, rank needed, tool check and DC, time (in game, for reference: the calendar is never advanced), value and coin cost. **Craft** rolls the linked tool check (dnd5e's roll, DC as the target). **Recipes**: Known, Can learn, Needs a higher rank; Learn (players, switch *Players learn recipes themselves*), Teach and Forget (GM).
+- **The active GM's client does the writing.** Requests `learnRecipe`, `forgetRecipe` (GM), `craft` and `craftDecide` (GM), schema-checked; the handler checks the sender owns the character and re-checks everything (profession, known recipe, rank, materials, coin). The roll is read from its chat message (the sender's, for this character and recipe, at most 10 minutes old, used once). Success adds the item (or grows a matching consumable/loot stack), uses up the materials and pays the coin cost; a failure keeps or uses up the materials as the rules say. A chat card shows the result.
+- **GM approves each craft** (switch, off): a GM card with Approve / Refuse (Success / Failure / Refuse when there's no DC) before anything is made or used.
+- **Prices**: book values (standard coins) by default; *Prices in the world's coins* uses Wanderer's Toolkit's coins when it is active (its `moneyHTML`, and its `pay` with a reason for the coin log). Never required.
+- Known recipes are stored on the character (`flags.wanderers-guild.recipes`, at most 200). Health check: a Crafting section (recipes, missing professions or items, which rules are set, approval, prices). Remove data covers recipes, rules, known recipes, craft cards (deleted) and our marks on rolls. `api.crafting` and the hook `wanderers-guild.crafted` (experimental).
+- The Professions window's Recent box now says crafting results go to chat; Gather stays "Coming in a later version".
+
+### Untested in Foundry
+
+Not run in a live world yet; check on Foundry 14.370 with dnd5e 6.0.6 (and once on v13), with and without Wanderer's Toolkit:
+
+- [ ] The module loads with no console errors; Configure Settings shows *Feature: Crafting*; with it off (after the reload) there are no Craft / Recipes buttons, no Recipes / Crafting rules pages, and `api.crafting` is undefined.
+- [ ] Setup › Recipes: drag a world item and a compendium item onto *Makes*: name, picture, rarity, type and price appear; Save keeps them. Drop items on the materials box (adds a row) and on a row's UUID field; Add / Remove material keep typed values; a typed name-only material works.
+- [ ] Recipes: Edit / Delete, the profession filter, *Refresh from items* after changing an item's price, the warnings (no profession, missing profession, no item).
+- [ ] Import / export: Download writes a JSON file; pasting it back reports "0 new, N replacing"; pasting junk, or the rules JSON into the recipes box, is refused with a message.
+- [ ] Setup › Crafting rules: every field starts empty; Save keeps values; Clear all; rules Import / Download; the status line lists what is set.
+- [ ] Setup › Settings shows the three crafting switches (only with the feature on).
+- [ ] Crafting window from a character's Smithing card (Craft and Recipes buttons): the list colours by rarity, statuses are right, search and *Can craft* work, the window is dark in both themes, narrow width stacks the list above the detail.
+- [ ] Materials have / need count stacks from the same compendium item and stacks with the same name; giving the character a material redraws the open window.
+- [ ] Recipes page as a player: Learn on an allowed recipe adds it (the window redraws to Known); a recipe above the rank shows "needs …"; with *Players learn recipes themselves* off: "ask your GM". As GM: Teach (any rank), Forget.
+- [ ] Craft as a player with a DC set: dnd5e's roll dialog opens with the DC; the chat shows the roll and then the card; success adds the item (quantity right; a consumable stacks onto a matching one), lowers/deletes the materials; failure keeps or uses them per the rule.
+- [ ] Coin cost charged (rule on): standard coins without the toolkit (change given from a gold coin); with the toolkit and *world's coins* on, the coin log shows "Crafting: <recipe>" and the window/card show the toolkit's coin markup.
+- [ ] No DC anywhere: the card goes to the GM with Success / Failure / Refuse; players see "No DC is set: the GM decides" and no buttons. *GM approves each craft* on: Approve / Refuse; Refuse makes and uses nothing; materials removed between the roll and the approval give an error card.
+- [ ] A roll is used once: a double click or two GM tabs make one item; a roll message older than 10 minutes, or made by another user, is refused with a whispered notice.
+- [ ] No GM connected: Craft and Learn are disabled with the banner; the roll isn't made.
+- [ ] Two GM tabs: only one makes the item; a GM's Approve click from the non-leader tab works.
+- [ ] The time line shows the hours (and days with a working day set) and never moves the world clock.
+- [ ] Health: the Crafting section's lines; a recipe whose compendium item was deleted warns.
+- [ ] Setup › Data: the dry run counts recipes, rules, characters with known recipes, and cards/rolls; REMOVE deletes the cards and notices, keeps the roll messages (mark removed), clears the flags.
+- [ ] `api.crafting.open(actor, "smithing")`, `.assess(actor, id)`, `.learn(actor, id)`; the `wanderers-guild.crafted` hook fires once per decided craft on the GM client.
+
 ## 0.1.0 (unreleased)
 
 First slice: professions and ranks. Crafting, recipes and gathering are placeholders (their buttons say "Coming in a later version").

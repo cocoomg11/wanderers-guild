@@ -11,6 +11,8 @@ import * as PM from "./professions-model.mjs";
 import * as RM from "./ranks-model.mjs";
 import * as D5 from "./dnd5e.mjs";
 import * as Data from "./data.mjs";
+import * as RC from "./recipes-model.mjs";
+import * as CM from "./craft-model.mjs";
 
 /** Clamp for the caller's per-check budget (the Satchel passes its own). @param {unknown} ms */
 export const timeoutOf = ms => Math.min(300000, Math.max(1000, Number(ms) || 20000));
@@ -55,10 +57,40 @@ export function run(opts = {}) {
       else if (defs.length) add("ok", `Every player character (${pcs.length}) has at least one profession.`);
     });
   }
+  if (F.on("crafting")) {
+    h.section("Crafting");
+    h.check(add => {
+      const book = Data.recipes();
+      if (!book.list.length) add("info", "No recipes yet (setup › Recipes): the Crafting window is empty.");
+      else add("ok", `${plural(book.list.length, "recipe")} (at most ${RC.RECIPES_MAX}).`);
+      for (const w of RC.recipeWarnings(book, Data.professions().list.map(p => p.id))) add("warn", w);
+      const stored = S.get("recipeBook");
+      if (Array.isArray(/** @type {any} */ (stored)?.list) && /** @type {any} */ (stored).list.length > book.list.length) add("warn", `${plural(/** @type {any} */ (stored).list.length - book.list.length, "stored recipe")} couldn't be read and will be dropped on the next save.`);
+    });
+    h.check(add => {
+      // Result items that can't be found (world items, or a compendium's index; no document loads).
+      const found = (/** @type {string} */ u) => { try { return !!fromUuidSync(u); } catch { return true; } };
+      const gone = Data.recipes().list.filter(r => r.result.uuid && !found(r.result.uuid)).map(r => r.name);
+      if (gone.length) add("warn", `Result item not found for: ${gone.slice(0, 6).join(", ")}${gone.length > 6 ? ", …" : ""} (deleted, or its compendium is gone).`);
+    });
+    h.check(add => {
+      const st = CM.rulesStatus(Data.rules());
+      if (st.set.length) add("ok", `Crafting rules set: ${st.set.join(", ")}.`);
+      if (st.unset.length) add("info", `Crafting rules not set (fill in from your rules, setup › Crafting rules): ${st.unset.join(", ")}.`);
+      if (!st.set.includes("a DC")) add("info", "No DC is set anywhere, so every craft waits for a GM to decide (unless a recipe sets its own DC).");
+      add("info", S.get("craftApproval") ? "GM approves each craft: on." : "GM approves each craft: off (results follow the roll).");
+      add("info", "Crafting time is shown for reference only; the calendar is never advanced.");
+    });
+    h.check(add => {
+      const tk = game.modules.get(TOOLKIT_ID);
+      if (S.get("worldCoins") && !tk?.active) add("warn", "Prices in the world's coins is on, but Wanderer's Toolkit isn't active: prices show book values.");
+      else add("info", S.get("worldCoins") ? "Prices: the world's coins (Wanderer's Toolkit)." : "Prices: book values.");
+    });
+  }
   h.section("Optional modules");
   h.check(add => {
     const tk = game.modules.get(TOOLKIT_ID);
-    add("info", tk?.active ? `Wanderer's Toolkit ${tk.version} is active (its coin settings will be used for prices in a later version).` : "Wanderer's Toolkit is not active (not needed).");
+    add("info", tk?.active ? `Wanderer's Toolkit ${tk.version} is active (crafting prices can use its coins: setup › Settings).` : "Wanderer's Toolkit is not active (not needed).");
     const ip = game.modules.get("item-piles");
     add("info", ip?.active ? `Item Piles ${ip.version} is active.` : "Item Piles is not active (not needed).");
   });

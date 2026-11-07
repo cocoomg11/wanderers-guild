@@ -99,3 +99,76 @@
 .wg-prof .wg-empty { padding: 18px; text-align: center; border: 1px dashed var(--wg-edge); border-radius: 4px; }
 .wg-prof .wg-empty p { margin: 0.3rem 0; }
 @media (max-width: 640px) { .wg-prof .wg-srow { grid-template-columns: 30px minmax(0, 1fr) auto; } .wg-prof .wg-srow .wg-rar { grid-column: 2 / -1; } }
+
+/* ---------------------------------------------------------------- setup window: recipes and crafting rules */
+.wg-setup-window .wg-h { margin: 0.4rem 0 0; font-size: 1rem; border: none; }
+.wg-setup-window .wg-inline { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; margin: 0; }
+.wg-setup-window .wg-drop { border: 1px dashed var(--wc-line); border-radius: var(--wc-radius-sm); padding: 0.4rem; }
+.wg-setup-window .wg-drop.wg-over { border-color: var(--wc-accent); background: var(--wc-accent-bg); }
+.wg-setup-window .wg-thumb { width: 24px; height: 24px; vertical-align: middle; margin-right: 0.35rem; border: none; }
+.wg-setup-window .wg-io > summary { cursor: pointer; list-style: none; }
+.wg-setup-window .wg-json { width: 100%; font-family: var(--font-mono, monospace); font-size: 12px; min-height: 8rem; }
+
+/* ---------------------------------------------------------------- Crafting window (uses the .wg-prof palette) */
+.wg-craft-window .window-content { padding: 0; }
+.wg-craft { --wg-neg: #ff8f7f; --wg-unk: #a39d94; }
+.wg-craft .wg-gold { color: var(--wg-gold); }
+.wg-craft .wg-pos { color: var(--wg-pos); }
+.wg-craft .wg-neg { color: var(--wg-neg); }
+.wg-craft .wg-tabs { display: flex; gap: 4px; }
+.wg-craft .wg-tab { all: unset; cursor: pointer; padding: 4px 12px; border-radius: 4px; font-size: 13px; font-weight: 600; color: var(--wg-ink2); border: 1px solid var(--wg-edge); background: rgba(0, 0, 0, 0.3); }
+.wg-craft .wg-tab.on { color: #ffe2a0; border-color: var(--wg-trimhi); background: rgba(232, 195, 90, 0.14); }
+.wg-craft .wg-tab:focus-visible, .wg-craft .wg-rl:focus-visible, .wg-craft .wg-chip:focus-visible { outline: 2px solid var(--wg-trimhi); outline-offset: -2px; }
+.wg-craft .wg-banner { margin: 0; padding: 6px 14px; font-size: 12px; color: #1b1300; background: var(--wg-gold); }
+.wg-craft .wg-split { flex: 1; min-height: 0; display: flex; }
+.wg-craft .wg-aside { width: 320px; flex: none; display: flex; flex-direction: column; min-height: 0; border-right: 1px solid color-mix(in srgb, var(--wg-trim) 45%, transparent); background: rgba(0, 0, 0, 0.25); }
+.wg-craft .wg-tools { display: flex; flex-direction: column; gap: 6px; }
+.wg-craft .wg-search { width: 100%; box-sizing: border-box; height: 28px; color: var(--wg-ink); background: rgba(0, 0, 0, 0.45); border: 1px solid var(--wg-edge); border-radius: 4px; padding: 0 8px; }
+.wg-craft .wg-chips { display: flex; gap: 4px; flex-wrap: wrap; }
+.wg-craft .wg-chip { all: unset; cursor: pointer; font-size: 11px; padding: 2px 9px; border-radius: 10px; color: var(--wg-ink2); border: 1px solid var(--wg-edge); }
+.wg-craft .wg-chip.on { color: #ffe2a0; border-color: var(--wg-trimhi); }
+.wg-craft .wg-scroll { flex: 1; min-height: 0; overflow-y: auto; }
+.wg-craft .wg-sect { padding: 6px 10px 3px; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--wg-ink3); }
+.wg-craft .wg-rl { all: unset; box-sizing: border-box; cursor: pointer; width: 100%; display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 2px 10px; font-size: 13px; border-bottom: 1px solid rgba(255, 255, 255, 0.04); }
+.wg-craft .wg-rl .wg-nm { flex: 1; min-width: 0; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wg-craft .wg-rl small { font-size: 11px; color: var(--wg-d, var(--wg-ink3)); }
+.wg-craft .wg-rl.wg-st-unk .wg-nm { opacity: 0.6; }
+.wg-craft .wg-rl.sel { background: rgba(232, 195, 90, 0.1); box-shadow: inset 2px 0 0 var(--wg-trimhi); }
+.wg-craft .wg-st-ok { --wg-d: var(--wg-pos); }
+.wg-craft .wg-st-miss { --wg-d: var(--wg-gold); }
+.wg-craft .wg-st-rank { --wg-d: var(--wg-neg); }
+.wg-craft .wg-st-unk { --wg-d: var(--wg-unk); }
+.wg-craft .wg-dk { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--wg-ink2); white-space: nowrap; }
+.wg-craft .wg-dk i { width: 9px; height: 9px; border-radius: 2px; background: var(--wg-d, var(--wg-ink3)); }
+.wg-craft .wg-legend { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 10px; border-top: 1px solid color-mix(in srgb, var(--wg-trim) 40%, transparent); }
+.wg-craft .wg-res { display: flex; gap: 12px; align-items: center; padding: 12px; }
+.wg-craft .wg-res .wg-grow { display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
+.wg-craft .wg-res .wg-pname { font-size: 17px; }
+.wg-craft .wg-two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+.wg-craft .wg-mat { display: flex; justify-content: space-between; gap: 8px; padding: 5px 10px; font-size: 13px; border-bottom: 1px solid rgba(255, 255, 255, 0.04); }
+.wg-craft .wg-mat b { font-variant-numeric: tabular-nums; }
+.wg-craft .wg-foot { margin-top: auto; display: flex; align-items: center; gap: 10px; padding-top: 10px; border-top: 1px solid color-mix(in srgb, var(--wg-trim) 40%, transparent); font-size: 12px; }
+.wg-craft .wg-lab { color: var(--wg-ink2); font-size: 12px; }
+.wg-craft .wg-num { width: 4rem; height: 26px; color: var(--wg-ink); background: rgba(0, 0, 0, 0.45); border: 1px solid var(--wg-edge); border-radius: 4px; }
+.wg-craft .wg-gbtn.big { height: 34px; padding: 0 16px; font-size: 13px; }
+.wg-craft .wg-gbtn.pri { background: linear-gradient(#6b4f1c, #3a2a0e); border-color: var(--wg-trimhi); }
+.wg-craft .wg-gbtn[disabled] { opacity: 0.45; cursor: default; }
+.wg-craft .wg-lrow { display: grid; grid-template-columns: 20px auto minmax(0, 1fr) 7rem auto; gap: 10px; align-items: center; min-height: 40px; padding: 3px 12px; border-bottom: 1px solid rgba(255, 255, 255, 0.05); font-size: 13px; }
+.wg-craft .wg-lrow.done { opacity: 0.8; }
+.wg-craft .wg-lrow .wg-req { font-size: 12px; color: var(--wg-ink2); }
+.wg-craft .wg-lrow .wg-act { text-align: right; font-size: 12px; }
+.wg-craft .wg-tick { width: 18px; height: 18px; border-radius: 3px; border: 1.5px solid var(--wg-ink3); box-sizing: border-box; display: grid; place-items: center; }
+.wg-craft .wg-tick.on { background: #3f8a2a; border-color: var(--wg-pos); }
+.wg-craft .wg-tick svg { width: 12px; height: 12px; fill: none; stroke: #fff; stroke-width: 3; }
+@media (max-width: 760px) { .wg-craft .wg-split { flex-direction: column; } .wg-craft .wg-aside { width: auto; max-height: 40%; } .wg-craft .wg-two { grid-template-columns: minmax(0, 1fr); } }
+
+/* ---------------------------------------------------------------- craft chat card */
+.wg-chat { display: flex; flex-direction: column; gap: 4px; }
+.wg-chat .wg-chead { display: flex; gap: 8px; align-items: center; }
+.wg-chat .wg-chead > div { display: flex; flex-direction: column; min-width: 0; }
+.wg-chat .wg-cline { display: flex; justify-content: space-between; gap: 8px; margin: 0; font-size: 12px; }
+.wg-chat .wg-cline b { text-align: right; font-weight: 600; }
+.wg-chat .wg-creason { margin: 0; font-size: 12px; font-style: italic; }
+.wg-chat .wg-cbtns { display: flex; gap: 4px; flex-wrap: wrap; }
+.wg-chat .wg-dim { opacity: 0.75; font-size: 11px; }
+.wg-chat-line { margin: 0; }
