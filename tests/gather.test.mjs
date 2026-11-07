@@ -40,9 +40,40 @@ test("nodes, marks and the reset record", () => {
   assert.equal(G.markAt(m, "s:sceneAAAAAAAAAAAA"), 200);
   for (let i = 0; i < 150; i++) m = G.withMark(m, G.markKey(`s${i}`), 300 + i);
   assert.equal(m.marks.length, G.MARKS_MAX);
-  assert.deepEqual(G.normalizeReset({ v: 1, at: -3 }), { v: 1, at: 0 });
-  assert.equal(G.harvestedOf({ at: 5, actor: "A" }).actor, "A");
-  assert.equal(G.harvestedOf(null), null);
+  assert.deepEqual(G.normalizeReset({ v: 1, at: -3 }), { v: 2, at: 0, days: null });
+});
+
+test("reset record v2: v1 reads with no days, journey days from hours", () => {
+  assert.deepEqual(G.normalizeReset({ v: 1, at: 500 }), { v: 2, at: 500, days: null }, "v1 → v2");
+  assert.deepEqual(G.normalizeReset(undefined), { v: 2, at: 0, days: null });
+  assert.deepEqual(G.normalizeReset({ v: 2, at: 9, days: 3 }), { v: 2, at: 9, days: 3 });
+  assert.equal(G.normalizeReset({ v: 2, at: 9, days: 99 }).days, G.DAYS_MAX, "clamped");
+  assert.equal(G.normalizeReset({ v: 2, at: 9, days: 0 }).days, null);
+  assert.equal(G.normalizeReset({ v: 2, at: 9, days: "x" }).days, null);
+  assert.deepEqual(G.resetRecord(100, 4), { v: 2, at: 100, days: 4 });
+  assert.deepEqual(G.resetRecord(100), { v: 2, at: 100, days: null }, "a GM reset has no days");
+  assert.deepEqual([1, 24, 25, 48, 49, 0.5].map(G.daysFromHours), [1, 1, 2, 2, 3, 1]);
+  assert.deepEqual([0, -5, null, undefined, "x", NaN].map(G.daysFromHours), [null, null, null, null, null, null]);
+  assert.equal(G.daysFromHours(24 * 100), G.DAYS_MAX);
+  assert.deepEqual([0, 1, 2.4, 30, 31, "7", "x", null].map(G.clampDays), [1, 1, 2, 30, 30, 7, 1, 1]);
+});
+
+test("harvested marks v2: one per profession, v1 reads as one entry, capped", () => {
+  assert.deepEqual(G.normalizeHarvested({ v: 1, actor: "Actor.a", profession: "skinning", at: 5 }), { v: 2, list: [{ actor: "Actor.a", profession: "skinning", at: 5 }] }, "v1 → one-entry list");
+  assert.deepEqual(G.normalizeHarvested({ actor: "Actor.a", profession: "skinning", at: 5 }).list.length, 1, "no version: as v1");
+  assert.deepEqual(G.normalizeHarvested(null), { v: 2, list: [] });
+  assert.deepEqual(G.normalizeHarvested({ v: 1, at: 0, profession: "skinning" }).list, [], "no time: no mark");
+  let h = G.withHarvest(undefined, { actor: "Actor.a", profession: "skinning", at: 1 });
+  h = G.withHarvest(h, { actor: "Actor.b", profession: "herbalism", at: 2 });
+  assert.deepEqual(G.harvestedFor(h), ["skinning", "herbalism"]);
+  h = G.withHarvest(h, { actor: "Actor.c", profession: "skinning", at: 3 });
+  assert.deepEqual(h.list.map(m => [m.profession, m.actor]), [["herbalism", "Actor.b"], ["skinning", "Actor.c"]], "one per profession, newest last");
+  assert.deepEqual(G.harvestedFor({ v: 2, list: [{ profession: "skinning", at: 1 }, { profession: "skinning", at: 2 }, { profession: "Bad Id", at: 3 }] }), ["skinning"]);
+  // A v1 mark upgrades in place when a second profession harvests.
+  assert.deepEqual(G.harvestedFor(G.withHarvest({ v: 1, actor: "Actor.a", profession: "skinning", at: 5 }, { actor: "Actor.b", profession: "herbalism", at: 6 })), ["skinning", "herbalism"]);
+  for (let i = 0; i < 15; i++) h = G.withHarvest(h, { actor: "Actor.a", profession: `p${i}`, at: 10 + i });
+  assert.equal(h.list.length, G.HARVEST_MAX);
+  assert.equal(h.list.at(-1).profession, "p14");
 });
 
 test("DCs: node, tier, scene tier, CR bands", () => {
@@ -84,12 +115,15 @@ test("area and creatures", () => {
   const area = G.assessGather({ ...base, kind: "area", sceneTier: "t1", sceneName: "Vale", distance: 0, lastAt: 0 });
   assert.equal(area.ok, true); assert.equal(area.dc, 11); assert.equal(area.item.name, "Leaf"); assert.equal(area.where, "Vale");
   assert.match(G.assessGather({ ...base, kind: "area", areaOn: false, sceneTier: "t1", distance: 0 }).problems.join(), /off/);
-  const wolf = { name: "Wolf", type: "beast", cr: 0.25, dead: true, harvested: false, npc: true };
+  assert.match(G.assessGather({ ...base, kind: "area", sceneTier: "t1", distance: null }).problems.join(), /area needs your character's token on this scene/);
+  assert.equal(G.assessGather({ ...base, isGM: true, kind: "area", sceneTier: "t1", distance: null }).ok, true, "GMs gather without a token");
+  const wolf = { name: "Wolf", type: "beast", cr: 0.25, dead: true, harvested: [], npc: true };
   const c = G.assessGather({ ...base, kind: "creature", creature: wolf, distance: 1 });
   assert.equal(c.ok, true, c.problems.join()); assert.equal(c.dc, 7); assert.equal(c.tierName, "CR 1/4"); assert.equal(c.rare.name, "Bloom");
   const cp = f => G.assessGather({ ...base, kind: "creature", creature: { ...wolf, ...f }, distance: 1 }).problems.join(" ");
   assert.match(cp({ dead: false }), /isn't defeated/);
-  assert.match(cp({ harvested: true }), /already harvested/);
+  assert.match(cp({ harvested: ["herbalism"] }), /already harvested for Herbalism/);
+  assert.equal(G.assessGather({ ...base, kind: "creature", creature: { ...wolf, harvested: ["skinning"] }, distance: 1 }).ok, true, "another profession's harvest doesn't block this one");
   assert.match(cp({ type: "fiend" }), /nothing to harvest/);
   assert.match(cp({ npc: false }), /NPC/);
   assert.match(G.assessGather({ ...base, kind: "creature", distance: 1 }).problems.join(), /Target/);
@@ -106,6 +140,29 @@ test("outcome and what a success gives", () => {
   assert.deepEqual(G.gains({ item: leaf, rare: null, qty: 3 }, { success: true, rare: false }).map(g => g.qty), [3]);
   assert.deepEqual(G.gains({ item: leaf, rare: bloom, qty: 3 }, { success: false, rare: false }), []);
   assert.deepEqual(G.gains({ item: null, rare: null, qty: 3 }, { success: true, rare: false }), []);
+});
+
+test("quantity per day of the stage: perDay (default) and flat", () => {
+  assert.equal(G.normalizeGatherRules(undefined).qtyMode, "perDay");
+  assert.equal(G.normalizeGatherRules({ v: 1, qtyMode: "flat" }).qtyMode, "flat");
+  assert.equal(G.normalizeGatherRules({ v: 1, qtyMode: "weekly" }).qtyMode, "perDay");
+  // rules.qty 2: a node with no qty of its own gives 2 per day.
+  const n3 = G.assessGather({ ...base, kind: "node", node, sceneTier: "t1", distance: 1, days: 3 });
+  assert.deepEqual([n3.perDay, n3.days, n3.qty, n3.perDayMode], [2, 3, 6, true]);
+  assert.equal(G.assessGather({ ...base, kind: "node", node, sceneTier: "t1", distance: 1 }).qty, 2, "default 1 day");
+  assert.equal(G.assessGather({ ...base, kind: "node", node, sceneTier: "t1", distance: 1, days: 99 }).days, G.DAYS_MAX, "clamped");
+  const area = G.assessGather({ ...base, kind: "area", sceneTier: "t1", distance: 0, days: 4 });
+  assert.equal(area.qty, 8);
+  const flat = { ...rules, qtyMode: /** @type {const} */ ("flat") };
+  const f = G.assessGather({ ...base, rules: flat, kind: "node", node, sceneTier: "t1", distance: 1, days: 3 });
+  assert.deepEqual([f.qty, f.days, f.perDayMode], [2, 1, false], "flat: just qty");
+  const wolf = { name: "Wolf", type: "beast", cr: 0.25, dead: true, harvested: [], npc: true };
+  const c = G.assessGather({ ...base, kind: "creature", creature: wolf, distance: 1, days: 5 });
+  assert.deepEqual([c.qty, c.days, c.perDayMode], [2, 1, false], "a creature is harvested once: no days");
+  // Rare replaces one of the stage's total.
+  assert.deepEqual(G.gains(n3, { success: true, rare: true }).map(g => [g.ref.name, g.qty]), [["Bloom", 1], ["Leaf", 5]]);
+  assert.deepEqual(G.gains(n3, { success: true, rare: false }).map(g => [g.ref.name, g.qty]), [["Leaf", 6]]);
+  assert.deepEqual(G.gains(n3, { success: false, rare: false }), []);
 });
 
 test("import / export, status, warnings, node Note data, distance", () => {

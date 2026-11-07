@@ -45,6 +45,7 @@ export class GatherApp extends Base {
     this.actor = actor; this.professionId = professionId;
     /** @type {string | null} a node's Note UUID to list first (opened from the node) */ this.focus = options.focus ?? null;
     this.busy = false;
+    /** @type {number | null} days typed into *Days in this stage* (null: the last journey's, else 1) */ this.daysTyped = null;
     OPEN.set(actor.id, this);
   }
 
@@ -55,6 +56,9 @@ export class GatherApp extends Base {
   };
 
   get title() { return `Gather: ${this.actor?.name ?? ""}`; }
+
+  /** Days in this journey stage: what the user typed, else the last journey's (from the reset record), else 1. */
+  get days() { return GM.clampDays(this.daysTyped ?? Data.journeyDays() ?? 1); }
 
   /** The options shown: [{ option, target }]. */
   options() {
@@ -78,15 +82,20 @@ export class GatherApp extends Base {
     const profs = gatherers(this.actor);
     const p = Data.professions().list.find(x => x.id === this.professionId);
     const isGM = !!game.user?.isGM;
+    const days = this.days;
+    const perDay = Data.gatherRules().qtyMode !== "flat";
     const options = this.options().map(({ key, target }) => {
-      const f = gatherFacts(this.actor, this.professionId, target, { isGM });
+      const f = gatherFacts(this.actor, this.professionId, target, { isGM, days });
       const a = GM.assessGather(f);
       return { key, kind: f.kind, title: a.where, dcText: a.dcText, rollText: rollLabel(a.roll), gives: givesText(a, a.rareMargin), problems: a.problems, ok: a.ok };
     });
+    const journey = Data.journeyDays();
+    const daysField = perDay && options.some(o => o.kind !== "creature")
+      ? { value: days, max: GM.DAYS_MAX, hint: this.daysTyped === null && journey ? "from the last journey" : "" } : null;
     return {
       actorName: this.actor.name, profession: { id: this.professionId, name: p?.name ?? this.professionId, icon: ICONS[p?.icon ?? "pick"]?.d ?? ICONS.pick.d },
-      professions: profs.map(x => ({ id: x.id, name: x.name })), options, noGM: !leader.activeGM(), locked: this.busy || !canUse(this.actor),
-      note: canvas?.scene ? "Target (or select) a defeated creature to harvest it. The check is rolled here; the GM's client gives the items. Results go to chat." : "Open a scene with the character's token to gather."
+      professions: profs.map(x => ({ id: x.id, name: x.name })), options, days: daysField, noGM: !leader.activeGM(), locked: this.busy || !canUse(this.actor),
+      note: canvas?.scene ? "Target (or select) a defeated creature to harvest it. Gathering at a node or in the area needs the character's token on this scene. The check is rolled here; the GM's client gives the items. Results go to chat." : "Open a scene with the character's token to gather."
     };
   }
 
@@ -104,6 +113,9 @@ export class GatherApp extends Base {
     content.replaceChildren(result);
     const sel = /** @type {HTMLSelectElement | null} */ (content.querySelector("[data-wg-gprof]"));
     sel?.addEventListener("change", () => { this.professionId = sel.value; this.render(); });
+    const days = /** @type {HTMLInputElement | null} */ (content.querySelector("[data-wg-days]"));
+    days?.addEventListener("change", () => { this.daysTyped = GM.clampDays(days.value); this.render(); });
+    days?.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); days.blur(); } });
   }
 
   /** @param {PointerEvent} _event @param {HTMLElement} target */
@@ -115,11 +127,11 @@ export class GatherApp extends Base {
   async #gather(key) {
     if (this.busy) return;
     const opt = this.options().find(o => o.key === key); if (!opt) return;
-    const f = gatherFacts(this.actor, this.professionId, opt.target, { isGM: !!game.user?.isGM });
+    const f = gatherFacts(this.actor, this.professionId, opt.target, { isGM: !!game.user?.isGM, days: this.days });
     const a = GM.assessGather(f);
     if (!a.ok || !a.roll) { ui.notifications.warn(`${TITLE}: ${a.problems[0] ?? "can't gather here now."}`); return; }
     if (!leader.activeGM()) { ui.notifications.warn(`${TITLE}: a GM must be connected to gather.`); return; }
-    const req = /** @type {Record<string, string>} */ ({ actor: this.actor.uuid, profession: this.professionId });
+    const req = /** @type {Record<string, any>} */ ({ actor: this.actor.uuid, profession: this.professionId, days: this.days });
     if (opt.target.note) req.node = opt.target.note.uuid; else if (opt.target.token) req.token = opt.target.token.uuid; else req.scene = opt.target.scene.id;
     const targetKey = req.node ?? req.token ?? `scene:${req.scene}`;
     this.busy = true; this.render();

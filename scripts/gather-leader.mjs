@@ -76,15 +76,18 @@ async function addItem(actor, ref, qty) {
   return { name: doc.name, img: doc.img };
 }
 
-/** @param {{ actor: string, profession: string, roll: string, node?: string, scene?: string, token?: string }} data @param {any} user */
+/** @typedef {{ actor: string, profession: string, roll: string, days: number, node?: string, scene?: string, token?: string }} GatherData */
+/** @param {GatherData} data @param {any} user */
 async function onGather(data, user) {
   if ([data.node, data.scene, data.token].filter(Boolean).length !== 1) return log("gather: needs exactly one target");
   if (BUSY.has(data.roll)) return log("gather: that roll is being handled");
   BUSY.add(data.roll);
-  try { await serial(data.actor, () => gatherNow(data, user)); } finally { BUSY.delete(data.roll); }
+  // One gather per character at a time; a creature is also handled one gather at a time (its marks are per profession).
+  const run = () => gatherNow(data, user);
+  try { await serial(data.actor, data.token ? () => serial(`token:${data.token}`, run) : run); } finally { BUSY.delete(data.roll); }
 }
 
-/** @param {{ actor: string, profession: string, roll: string, node?: string, scene?: string, token?: string }} data @param {any} user */
+/** @param {GatherData} data @param {any} user */
 async function gatherNow(data, user) {
   const actor = await docOf(data.actor);
   if (!(actor instanceof Actor)) return log("gather: no such actor");
@@ -98,11 +101,11 @@ async function gatherNow(data, user) {
   const roll = readRoll(msg, user, actor, data.profession, targetKey(data));
   if ("error" in roll) return tell(user, actor, String(roll.error));
   await msg.setFlag(ID, "rollUsed", true);
-  const f = gatherFacts(actor, data.profession, target, { isGM: !!user.isGM });
+  const f = gatherFacts(actor, data.profession, target, { isGM: !!user.isGM, days: GM.clampDays(data.days) });
   const a = GM.assessGather(f);
   const profName = f.profession?.name ?? data.profession;
   /** @type {import("./gather-view.mjs").GatherCard} */
-  const card = { state: "error", actorName: actor.name, professionName: profName, kind: f.kind, where: a.where, rollText: rollLabel(a.roll), total: roll.total, dc: a.dc, tierName: a.tierName, rare: false, items: [], noItem: false };
+  const card = { state: "error", actorName: actor.name, professionName: profName, kind: f.kind, where: a.where, rollText: rollLabel(a.roll), total: roll.total, dc: a.dc, tierName: a.tierName, rare: false, items: [], noItem: false, perDay: a.perDayMode ? a.perDay : null, days: a.perDayMode ? a.days : null };
   if (!a.ok) return post(actor, { ...card, reason: `Nothing was gathered: ${a.problems.join(" ")}` }, roll.whisper, f, data);
   const out = GM.gatherOutcome(roll.total, a.dc, a.rareMargin, !!a.rare);
   const gains = GM.gains(a, out);
@@ -115,7 +118,7 @@ async function gatherNow(data, user) {
   const now = Date.now();
   if (f.key) await actor.setFlag(ID, "gathered", GM.withMark(Data.gathered(actor), f.key, now));
   if (target.note && out.success && f.node?.uses !== null && f.node?.uses !== undefined) await target.note.setFlag(ID, "node", GM.spendUse(f.node));
-  if (target.token && out.success) await target.token.setFlag(ID, "harvested", { v: 1, actor: actor.uuid, profession: data.profession, at: now });
+  if (target.token && out.success) await target.token.setFlag(ID, "harvested", GM.withHarvest(target.token.flags?.[ID]?.harvested, { actor: actor.uuid, profession: data.profession, at: now }));
   return post(actor, card, roll.whisper, f, data);
 }
 
@@ -124,7 +127,7 @@ async function gatherNow(data, user) {
  * @param {any} actor @param {import("./gather-view.mjs").GatherCard} card @param {string[]} whisper @param {any} f @param {any} data
  */
 async function post(actor, card, whisper, f, data) {
-  const st = { v: 1, state: card.state, actor: actor.uuid, profession: data.profession, kind: f.kind, target: targetKey(data), total: card.total, dc: card.dc, rare: card.rare, at: Date.now() };
+  const st = { v: 1, state: card.state, actor: actor.uuid, profession: data.profession, kind: f.kind, target: targetKey(data), total: card.total, dc: card.dc, rare: card.rare, days: card.days ?? null, at: Date.now() };
   const message = await ChatMessage.create({ content: gatherCardHTML(card), speaker: ChatMessage.getSpeaker({ actor }), whisper, flags: { [ID]: { gather: st } } });
   if (card.state === "done" || card.state === "failed") {
     try { Hooks.callAll(HOOKS.gathered, { actorId: actor.id, professionId: data.profession, kind: f.kind, success: card.state === "done", rare: card.rare, messageId: message?.id ?? null }); } catch (e) { warn("gathered hook", e); }
@@ -134,17 +137,19 @@ async function post(actor, card, whisper, f, data) {
 /** Registers the handlers (every client; core runs them only on the leader). */
 export function registerHandlers() {
   leader.handle("gather", onGather);
-  leader.handle("gatherReset", async () => { await Data.resetGatherLimits(); log("gathering limits reset (relayed)"); });
+  leader.handle("gatherReset", async (/** @type {{ days?: number }} */ d) => { await Data.resetGatherLimits(d?.days ? GM.clampDays(d.days) : null); log("gathering limits reset (relayed)"); });
 }
 
 /**
  * The toolkit's journey hook (setting *Travel resets gathering limits*): fired on the toolkit's writing GM client. The writing
- * client resets at once; another GM tab relays to it. Read defensively: only the event matters, no field is trusted.
+ * client resets at once; another GM tab relays to it. Read defensively: the event, plus `hours` (a positive number, turned into
+ * days with `daysFromHours`; anything else = no days) to prefill the Gather window's *Days in this stage* on every client.
  */
 export function registerJourneyHook() {
-  Hooks.on(JOURNEY_HOOK, () => {
+  Hooks.on(JOURNEY_HOOK, (/** @type {any} */ payload) => {
     if (!S.get("gatherJourney") || !game.user?.isGM || !game.modules.get(TOOLKIT_ID)?.active) return;
-    if (leader.isLeader()) Data.resetGatherLimits().then(() => log("gathering limits reset after a journey")).catch(e => warn("journey reset", e));
-    else leader.request("gatherReset", {});
+    const days = GM.daysFromHours(payload && typeof payload === "object" ? payload.hours : null);
+    if (leader.isLeader()) Data.resetGatherLimits(days).then(() => log(`gathering limits reset after a journey${days ? ` (${days} day${days === 1 ? "" : "s"})` : ""}`)).catch(e => warn("journey reset", e));
+    else leader.request("gatherReset", days ? { days } : {});
   });
 }

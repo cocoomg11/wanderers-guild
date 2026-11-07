@@ -5,8 +5,8 @@
 ## The short version
 
 1. **Professions** (setup › Professions): a profession gathers when its actions include **Gather** (gathering professions get it by default). Pick what it rolls: its *Gathering check* (a skill, Survival by default) or *the linked tool* (the character's best proficient tool).
-2. **Gathering** (setup › Gathering): name your tiers and give each a DC; set *Per success*, the *Rare margin* (empty = off) and the *Reach*. Add area resources and harvesting rows if you want them.
-3. **Scenes**: Scene configuration › *Table Tools* › *Gathering tier*.
+2. **Gathering** (setup › Gathering): name your tiers and give each a DC; set *Per success* and its *Count* (per day of the journey stage, or flat), the *Rare margin* (empty = off) and the *Reach*. Add area resources and harvesting rows if you want them.
+3. **Scenes**: Scene configuration › *Table Tools* › *Gathering tier*. The tier belongs to the whole scene: core Regions get no tier of their own (scene tiers are enough; a map with two kinds of ground can use nodes with their own tier or DC).
 4. **Nodes**: Journal Notes controls › **Gathering node**, then click the map. Fill in the node: name, profession, resource and rare resource (drop items), and optionally its own tier, DC, quantity, uses and needed bonus.
 5. Players press **Gather** on the profession's card (Professions window or the Wanderer's Toolkit sheet page), or double-click a node with their token selected.
 
@@ -26,29 +26,35 @@ No DC anywhere: the check is still rolled and shown, and it succeeds (the card s
 
 ## Results
 
-- **Success**: *Per success* of the resource (a node can set its own number).
-- **Rare**: beat the DC by the *Rare margin* or more and one of them is the rare resource instead. Empty margin (the default), no DC, or no rare item: never rare.
+- **Success**: *Per success* of the resource (a node can set its own number), for each day of the journey stage (see below).
+- **Rare**: beat the DC by the *Rare margin* or more and one of them (of the whole stage's amount) is the rare resource instead. Empty margin (the default), no DC, or no rare item: never rare.
 - **No item set**: the check is made and the card says the GM hands out what was found; nothing is created.
 - **Failure**: nothing.
 
 Items go to the character's inventory: onto a consumable or loot stack from the same item, else as a new item.
+
+## Quantity: per day of the journey stage
+
+One check covers a whole journey stage. With *Count: per day of the journey stage* (the default), a success at a node or in an area gives *Per success* for **each day** of the stage: the Gather window has a **Days in this stage** field (1 to 30, default 1), and the card shows "2 per day × 3 days". After a Wanderer's Toolkit journey that reported its length in hours, the field starts at that journey's days (hours ÷ 24, rounded up, at least 1; the GM's client stores it in the reset record, which every client reads). A GM's **Reset gathering limits** starts a new stage with no length (the field starts at 1). The player can change the number; the GM's client accepts 1 to 30 and uses it as sent (an honor system, like the rest of the table's numbers).
+
+With *Count: flat*, a success gives just *Per success*, whatever the days. Harvesting a creature always counts once (no days).
 
 ## Limits: one gather per stage
 
 With *One gather per node until reset* (Settings, on), a character gathers once at each node and once per scene's area. The limit clears when:
 
 - the GM presses **Reset gathering limits** (setup › Gathering), or ticks *Reset this node's limits* in a node's editor;
-- the party travels with Wanderer's Toolkit (hex travel or a flight), when *Travel resets gathering limits* is on (on). The toolkit's journey hook is read on the GM's client; nothing else about the trip is used.
+- the party travels with Wanderer's Toolkit (hex travel or a flight), when *Travel resets gathering limits* is on (on). The toolkit's journey hook is read on the GM's client; only its `hours` is used (for *Days in this stage*), nothing else about the trip.
 
 A node's **Uses left** (empty = unlimited) goes down by one with each success; at 0 the node is used up (it shows dimmed). The calendar is never advanced.
 
 ## Gathering without a node
 
-With *Gather without a node* on (on), a character with a token on the scene can gather in its area when no node of their profession is within reach. The DC is the scene's tier's. What they find comes from **Gathering without a node** rows on the Gathering page (profession + tier, or any tier); with no row the GM hands it out.
+With *Gather without a node* on (on), a character **with a token on the scene** can gather in its area when no node of their profession is within reach. The DC is the scene's tier's. What they find comes from **Gathering without a node** rows on the Gathering page (profession + tier, or any tier); with no row the GM hands it out. The token rule is on purpose: without the character's token on the scene the option says "Gathering in an area needs your character's token on this scene." (GMs gather from anywhere.)
 
 ## Harvesting creatures
 
-Target (or select) a defeated NPC token (HP 0, or the dead status) and press Gather: the window offers **Harvest**. It needs a harvesting row for the creature's type and the profession (setup › Gathering: *Harvesting creatures*, with resource, rare resource and an optional needed proficiency bonus). The DC comes from the CR bands. Each creature can be harvested once (a mark on its token).
+Target (or select) a defeated NPC token (HP 0, or the dead status) and press Gather: the window offers **Harvest**. It needs a harvesting row for the creature's type and the profession (setup › Gathering: *Harvesting creatures*, with resource, rare resource and an optional needed proficiency bonus). The DC comes from the CR bands. Each creature can be harvested **once per profession** (a mark per profession on its token, at most 10): a skinner and an herbalist can both harvest the same creature, but a second skinner can't.
 
 ## Reach and tokens
 
@@ -64,11 +70,11 @@ Players never write documents. The Gather window rolls the check (dnd5e's skill 
 
 ## What it writes
 
-- World settings `gatherRules` (tiers, DCs, margin, quantity, reach, CR bands, harvesting and area rows) and `gatherReset` (when the limits were last reset).
+- World settings `gatherRules` (tiers, DCs, margin, quantity and its count, reach, CR bands, harvesting and area rows) and `gatherReset` (when the limits were last reset, and the last journey's days).
 - Scenes: `flags.wanderers-guild.tier`.
 - Nodes: map notes with `flags.wanderers-guild.node`.
 - Characters: `flags.wanderers-guild.gathered` (at most 100 limit marks); the gathered items.
-- Creature tokens: `flags.wanderers-guild.harvested`.
+- Creature tokens: `flags.wanderers-guild.harvested` (one mark per profession).
 - Chat: gather cards (`flags.wanderers-guild.gather`), notices, and `gatherRoll` / `rollUsed` marks on the check rolls.
 
 Setup › Data removes each of them (nodes are deleted; gathered items stay).

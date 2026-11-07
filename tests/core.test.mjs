@@ -28,7 +28,7 @@ test("request schemas: what each kind accepts and refuses", () => {
   assert.equal(req("craft", { actor, recipe: "blade", roll: "abcdefghij123456", helpers: 0, total: 30 }).ok, false, "no total from the client");
   assert.equal(req("craftDecide", { message: "abcdefghij123456", choice: "approve" }).ok, true);
   assert.equal(req("craftDecide", { message: "abcdefghij123456", choice: "explode" }).ok, false);
-  const g = { actor, profession: "herbalism", roll: "abcdefghij123456" };
+  const g = { actor, profession: "herbalism", roll: "abcdefghij123456", days: 1 };
   assert.equal(req("gather", { ...g, node: "Scene.abcdefghij123456.Note.abcdefghij654321" }).ok, true);
   assert.equal(req("gather", { ...g, scene: "abcdefghij123456" }).ok, true);
   assert.equal(req("gather", { ...g, token: "Scene.abcdefghij123456.Token.abcdefghij654321" }).ok, true);
@@ -38,6 +38,13 @@ test("request schemas: what each kind accepts and refuses", () => {
   assert.equal(req("gather", { ...g, profession: "Bad Id", scene: "abcdefghij123456" }).ok, false);
   assert.equal(REQUESTS.gather.from, undefined); assert.equal(REQUESTS.gatherReset.from, "gm");
   assert.equal(req("gatherReset", {}).ok, true);
+  // Days in the journey stage: a whole number 1–30, always sent with a gather.
+  assert.equal(req("gather", { ...g, scene: "abcdefghij123456", days: 30 }).ok, true);
+  for (const days of [0, 31, 2.5, "3", -1]) assert.equal(req("gather", { ...g, scene: "abcdefghij123456", days }).ok, false, `days ${days}`);
+  const { days: _d, ...noDays } = g;
+  assert.equal(req("gather", { ...noDays, scene: "abcdefghij123456" }).ok, false, "days is required");
+  assert.equal(req("gatherReset", { days: 4 }).ok, true);
+  assert.equal(req("gatherReset", { days: 31 }).ok, false);
 });
 
 // core.mjs binds core to this module. These definitions throw on a typo (duplicate key, bad type, a need that isn't a feature), so

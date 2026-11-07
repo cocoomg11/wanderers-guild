@@ -81,9 +81,15 @@ export async function saveGatherRules(r) {
   return true;
 }
 
-/** Resets every gathering limit (GM click, or the writing GM client after a journey): limits older than now stop counting. */
-export async function resetGatherLimits() {
+/** The last journey's length in days (prefills the Gather window's *Days in this stage*), or null. */
+export const journeyDays = () => GM.normalizeReset(S.get("gatherReset")).days;
+
+/**
+ * Resets every gathering limit (GM click, or the writing GM client after a journey): limits older than now stop counting.
+ * @param {number | null} [days] the journey's length in days (null: a GM reset, the Gather window starts at 1 day)
+ */
+export async function resetGatherLimits(days = null) {
   if (!game.user?.isGM) return false;
-  await S.set("gatherReset", { v: 1, at: Date.now() });
+  await S.set("gatherReset", GM.resetRecord(Date.now(), days));
   return true;
 }

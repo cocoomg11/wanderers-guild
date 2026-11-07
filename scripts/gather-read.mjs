@@ -50,13 +50,14 @@ export const sceneTier = scene => String(scene?.flags?.[ID]?.tier ?? "");
  * @param {any} actor the gatherer
  * @param {string} professionId
  * @param {{ note?: any, scene?: any, token?: any }} target a node's Note, a scene (its area), or a creature's token document
- * @param {{ isGM: boolean }} who the user acting (the window's user, or the request's sender on the leader)
+ * @param {{ isGM: boolean, days?: number }} who the user acting (the window's user, or the request's sender on the leader), and the
+ *   days in this journey stage (the window's field, or the request's `days`; default 1)
  * @returns {import("./gather-model.mjs").GatherFacts & { key: string, scene: any }}
  */
 export function gatherFacts(actor, professionId, target, who) {
   const rules = Data.gatherRules();
   const profession = Data.professions().list.find(p => p.id === professionId) ?? null;
-  const base = { profession, facts: D5.facts(actor), rules, isGM: who.isGM, once: !!S.get("gatherOnce"), areaOn: !!S.get("gatherArea"), epoch: Data.gatherEpoch() };
+  const base = { profession, facts: D5.facts(actor), rules, isGM: who.isGM, days: GM.clampDays(who.days ?? 1), once: !!S.get("gatherOnce"), areaOn: !!S.get("gatherArea"), epoch: Data.gatherEpoch() };
   const marks = Data.gathered(actor);
   if (target.note) {
     const scene = target.note.parent;
@@ -67,7 +68,7 @@ export function gatherFacts(actor, professionId, target, who) {
   if (target.token) {
     const tok = target.token; const scene = tok.parent;
     const c = D5.creatureFacts(tok.actor);
-    const harvested = !!GM.harvestedOf(tok.flags?.[ID]?.harvested);
+    const harvested = GM.harvestedFor(tok.flags?.[ID]?.harvested);
     const g = gridOf(scene);
     return { ...base, kind: "creature", creature: { ...c, harvested }, distance: distanceTo(actor, scene, centerOf(tok, g)), key: "", scene };
   }

@@ -5,15 +5,23 @@
  * check is made and succeeds, as with crafting.
  *
  * Stored shapes (each read through one normalizer here):
- * - world setting `gatherRules` `{ v: 1, tiers: [{ id, name, dc }], rareMargin, qty, reach, crBands: [{ cr, dc }],
+ * - world setting `gatherRules` `{ v: 1, tiers: [{ id, name, dc }], rareMargin, qty, qtyMode, reach, crBands: [{ cr, dc }],
  *   creatures: [{ type, profession, item, rare, minBonus }], areas: [{ profession, tier, item, rare }] }` (item / rare =
  *   `{ uuid, name, img }` or null).
- * - world setting `gatherReset` `{ v: 1, at }`: gathering limits older than `at` no longer count (the GM's reset, or a journey).
+ * - world setting `gatherReset` `{ v: 2, at, days }`: gathering limits older than `at` no longer count (the GM's reset, or a journey);
+ *   `days` = the last journey's length in days (from the toolkit's `hours`; null after a GM reset or a journey without hours), which
+ *   prefills the Gather window's *Days in this stage*. v1 `{ v: 1, at }` reads as `days: null`.
  * - a node: a core Note with `flags.wanderers-guild.node` `{ v: 1, profession, name, item, rare, tier, dc, qty, uses, minBonus,
  *   hidden, resetAt }`.
  * - an actor's limits: `flags.wanderers-guild.gathered` `{ v: 1, marks: [{ key, at }] }` (key `n:<sceneId>.<noteId>` or
  *   `s:<sceneId>`), at most MARKS_MAX.
- * - a harvested creature: the token's `flags.wanderers-guild.harvested` `{ v: 1, actor, profession, at }`.
+ * - a harvested creature: the token's `flags.wanderers-guild.harvested` `{ v: 2, list: [{ actor, profession, at }] }`, one entry per
+ *   profession (a creature is harvested once per profession), at most HARVEST_MAX; v1 `{ v: 1, actor, profession, at }` reads as a
+ *   one-entry list.
+ *
+ * Quantity: a success at a node or in an area gives `qty` per day of the journey stage (`qtyMode` "perDay", the default; the days
+ * come with the request, 1–DAYS_MAX), or just `qty` (`qtyMode` "flat"). One check per stage either way; a rare result replaces one
+ * of them. Harvesting a creature always gives `qty` (no days).
  */
 import { versioned } from "../vendor/wanderers-core/index.mjs";
 import { UUID_RE, optNum, DC_MIN, DC_MAX } from "./recipes-model.mjs";
@@ -32,6 +40,12 @@ export const USES_MAX = 999;
 export const REACH_MAX = 100;
 export const NAME_MAX = 60;
 export const CR_MAX = 30;
+/** Most professions one creature keeps a harvested mark for. */
+export const HARVEST_MAX = 10;
+/** Days in one journey stage (the Gather window's field and the `gather` request). */
+export const DAYS_MAX = 30;
+/** How a success's quantity is counted. */
+export const QTY_MODES = Object.freeze(["perDay", "flat"]);
 /** A gather roll is usable for this long after it was made. */
 export const ROLL_MAX_AGE_MS = 10 * 60 * 1000;
 /** Tier ids: t + digits or letters. */
@@ -53,7 +67,7 @@ export const SRD_DCS = Object.freeze([
  * @typedef {{ cr: number, dc: number | null }} Band
  * @typedef {{ type: string, profession: string, item: ItemRef | null, rare: ItemRef | null, minBonus: number | null }} CreatureRow
  * @typedef {{ profession: string, tier: string, item: ItemRef | null, rare: ItemRef | null }} AreaRow
- * @typedef {{ v: number, tiers: Tier[], rareMargin: number | null, qty: number, reach: number, crBands: Band[], creatures: CreatureRow[], areas: AreaRow[] }} GatherRules
+ * @typedef {{ v: number, tiers: Tier[], rareMargin: number | null, qty: number, qtyMode: "perDay" | "flat", reach: number, crBands: Band[], creatures: CreatureRow[], areas: AreaRow[] }} GatherRules
  * @typedef {{ v: number, profession: string, name: string, item: ItemRef | null, rare: ItemRef | null, tier: string, dc: number | null, qty: number | null, uses: number | null, minBonus: number | null, hidden: boolean, resetAt: number }} Node
  */
 
@@ -76,8 +90,8 @@ export function cleanRef(raw) {
 /** The neutral tiers a new world starts with: names only, no DC. */
 export const defaultTiers = () => [1, 2, 3, 4, 5].map(n => ({ id: `t${n}`, name: `Tier ${n}`, dc: null }));
 
-/** Rules with nothing set: neutral tier names with empty DCs, no rare margin, 1 per success, a reach of 2 grid spaces. */
-export const defaultGatherRules = () => /** @type {GatherRules} */ ({ v: GATHER_VERSION, tiers: defaultTiers(), rareMargin: null, qty: 1, reach: 2, crBands: [], creatures: [], areas: [] });
+/** Rules with nothing set: neutral tier names with empty DCs, no rare margin, 1 per success (per day of the stage), a reach of 2 grid spaces. */
+export const defaultGatherRules = () => /** @type {GatherRules} */ ({ v: GATHER_VERSION, tiers: defaultTiers(), rareMargin: null, qty: 1, qtyMode: "perDay", reach: 2, crBands: [], creatures: [], areas: [] });
 
 /** @type {(raw: unknown) => GatherRules} */
 export const normalizeGatherRules = versioned({
@@ -116,17 +130,35 @@ export const normalizeGatherRules = versioned({
     }
     return {
       v: GATHER_VERSION, tiers: Array.isArray(o.tiers) ? tiers : defaultTiers(),
-      rareMargin: intOpt(o.rareMargin, 1, 30), qty: intOpt(o.qty, 1, QTY_MAX) ?? 1, reach: intOpt(o.reach, 0, REACH_MAX) ?? 2,
+      rareMargin: intOpt(o.rareMargin, 1, 30), qty: intOpt(o.qty, 1, QTY_MAX) ?? 1, qtyMode: o.qtyMode === "flat" ? "flat" : "perDay", reach: intOpt(o.reach, 0, REACH_MAX) ?? 2,
       crBands, creatures, areas
     };
   }
 });
 
-/** The reset record. @type {(raw: unknown) => { v: number, at: number }} */
+/** Days in a stage, clamped to 1–DAYS_MAX (anything unreadable = 1). @param {unknown} v */
+export function clampDays(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.min(DAYS_MAX, Math.max(1, Math.round(n))) : 1;
+}
+/** A journey's length in days from its hours: max(1, ceil(hours / 24)), at most DAYS_MAX; null without usable hours. @param {unknown} hours */
+export function daysFromHours(hours) {
+  const h = Number(hours);
+  return Number.isFinite(h) && h > 0 ? Math.min(DAYS_MAX, Math.max(1, Math.ceil(h / 24))) : null;
+}
+
+/** The reset record (v2: + `days`, the last journey's length). @type {(raw: unknown) => { v: number, at: number, days: number | null }} */
 export const normalizeReset = versioned({
-  version: 1, empty: () => ({ v: 1, at: 0 }),
-  clean: s => { const at = Number(/** @type {any} */ (s)?.at); return { v: 1, at: Number.isFinite(at) && at > 0 ? Math.round(at) : 0 }; }
+  version: 2, empty: () => ({ v: 2, at: 0, days: null }),
+  upgrades: { 0: s => s, 1: s => ({ ...s, days: null }) },
+  clean: s => {
+    const o = /** @type {any} */ (s); const at = Number(o?.at);
+    const d = o?.days === null || o?.days === undefined ? null : Number(o.days);
+    return { v: 2, at: Number.isFinite(at) && at > 0 ? Math.round(at) : 0, days: d !== null && Number.isFinite(d) && d >= 1 ? clampDays(d) : null };
+  }
 });
+/** The record a reset writes. @param {number} at @param {number | null} [days] the journey's days (null: a GM reset) */
+export const resetRecord = (at, days = null) => normalizeReset({ v: 2, at, days });
 
 /** A node's flag, normalized (null when it has no profession). @param {unknown} raw @returns {Node | null} */
 export function normalizeNode(raw) {
@@ -164,11 +196,28 @@ export const markAt = (stored, key) => normalizeMarks(stored).marks.find(m => m.
 /** The mark keys. @param {string} sceneId @param {string} [noteId] */
 export const markKey = (sceneId, noteId) => (noteId ? `n:${sceneId}.${noteId}` : `s:${sceneId}`);
 
-/** The harvested mark on a token. @param {unknown} raw */
-export function harvestedOf(raw) {
-  const o = /** @type {any} */ (raw);
-  const at = Number(o?.at);
-  return o && typeof o === "object" && Number.isFinite(at) && at > 0 ? { v: 1, actor: String(o.actor ?? ""), profession: String(o.profession ?? ""), at } : null;
+/** @typedef {{ actor: string, profession: string, at: number }} HarvestMark */
+/** A creature token's harvested marks, one per profession (v1's single mark reads as a one-entry list). @type {(raw: unknown) => { v: number, list: HarvestMark[] }} */
+export const normalizeHarvested = versioned({
+  version: 2, empty: () => ({ v: 2, list: [] }),
+  upgrades: { 0: s => s, 1: s => ({ list: [{ actor: s.actor, profession: s.profession, at: s.at }] }) },
+  clean: s => {
+    /** @type {HarvestMark[]} */ const list = []; const seen = new Set();
+    const raw = Array.isArray(/** @type {any} */ (s)?.list) ? /** @type {any} */ (s).list : [];
+    for (const m of [...raw].reverse()) {
+      const at = Number(m?.at); const profession = profId(m?.profession);
+      if (!profession || seen.has(profession) || !(Number.isFinite(at) && at > 0)) continue;
+      seen.add(profession); list.unshift({ actor: String(m?.actor ?? "").slice(0, 300), profession, at: Math.round(at) });
+    }
+    return { v: 2, list: list.slice(-HARVEST_MAX) };
+  }
+});
+/** The professions a creature was already harvested for. @param {unknown} raw */
+export const harvestedFor = raw => normalizeHarvested(raw).list.map(m => m.profession);
+/** The marks with this profession's harvest added (replacing an older one for it; the oldest dropped past HARVEST_MAX). @param {unknown} raw @param {HarvestMark} mark */
+export function withHarvest(raw, mark) {
+  const s = normalizeHarvested(raw);
+  return normalizeHarvested({ v: 2, list: [...s.list.filter(m => m.profession !== mark.profession), mark] });
 }
 
 /** A tier by id, or null. @param {GatherRules} rules @param {string} id */
@@ -217,12 +266,13 @@ export function gatherRoll(p, facts) {
  * @property {boolean} once one gather per node / scene until a reset (setting)
  * @property {boolean} [areaOn] gathering without a node allowed (setting)
  * @property {number} [epoch] the world's last reset (ms)
+ * @property {number} [days] days in this journey stage (1–DAYS_MAX; default 1; nodes and areas in "perDay" mode only)
  * @property {number} [lastAt] when this actor last gathered here (ms; 0 = never)
  * @property {number | null} [distance] grid spaces from the gatherer's token (null = no token on that scene)
  * @property {Node} [node]
  * @property {string} [sceneTier] the scene's tier id ("" = none)
  * @property {string} [sceneName]
- * @property {{ name: string, type: string, cr: number | null, dead: boolean, harvested: boolean, npc: boolean }} [creature]
+ * @property {{ name: string, type: string, cr: number | null, dead: boolean, harvested: string[], npc: boolean }} [creature] `harvested`: the professions it was harvested for
  */
 
 /**
@@ -249,7 +299,7 @@ export function assessGather(f) {
   let minBonus = null;
   const reachOk = () => {
     if (f.isGM || !rules.reach) return;
-    if (f.distance === null || f.distance === undefined) problems.push("Your character needs a token on this scene.");
+    if (f.distance === null || f.distance === undefined) problems.push("Your character needs a token on this scene, within reach.");
     else if (f.distance > rules.reach + 0.5) problems.push(`Too far: get within ${rules.reach} grid space${rules.reach === 1 ? "" : "s"}.`);
   };
   const onceOk = (/** @type {number} */ resetAt) => {
@@ -276,7 +326,7 @@ export function assessGather(f) {
     dc = tier?.dc ?? null;
     const row = p ? areaRow(rules, p.id, f.sceneTier ?? "") : null;
     item = row?.item ?? null; rare = row?.rare ?? null;
-    if (!f.isGM && (f.distance === null || f.distance === undefined)) problems.push("Your character needs a token on this scene.");
+    if (!f.isGM && (f.distance === null || f.distance === undefined)) problems.push("Gathering in an area needs your character's token on this scene.");
     onceOk(0);
   } else {
     const c = f.creature;
@@ -285,7 +335,7 @@ export function assessGather(f) {
       where = c.name;
       if (!c.npc) problems.push("Only creatures (NPCs) can be harvested.");
       if (!c.dead) problems.push(`${c.name} isn't defeated.`);
-      if (c.harvested) problems.push(`${c.name} was already harvested.`);
+      if (p && (c.harvested ?? []).includes(p.id)) problems.push(`${c.name} was already harvested for ${p.name}.`);
       const row = p ? creatureRow(rules, c.type, p.id) : null;
       if (p && !row) problems.push(`${p.name} has nothing to harvest from this kind of creature (setup › Gathering: Harvesting).`);
       dc = crDC(rules, c.cr); tierName = `CR ${crText(c.cr)}`;
@@ -295,7 +345,10 @@ export function assessGather(f) {
   }
   if (minBonus !== null && (f.facts.pb ?? 0) < minBonus) problems.push(`Needs a proficiency bonus of ${signed(minBonus)}.`);
   const dcText = dc === null ? "no DC set" : `DC ${dc}${tierName ? ` (${tierName})` : ""}`;
-  return { ok: !problems.length, problems, dc, dcText, tierName, where, item, rare, qty, roll, rareMargin: rules.rareMargin };
+  // One check per stage: "perDay" gives `qty` for each day of it (nodes and areas; a creature is harvested once).
+  const perDayMode = rules.qtyMode !== "flat" && f.kind !== "creature";
+  const days = perDayMode ? clampDays(f.days ?? 1) : 1;
+  return { ok: !problems.length, problems, dc, dcText, tierName, where, item, rare, qty: qty * days, perDay: qty, days, perDayMode, roll, rareMargin: rules.rareMargin };
 }
 
 /**
@@ -308,7 +361,7 @@ export function gatherOutcome(total, dc, margin, hasRare) {
 }
 
 /**
- * What a success gives: `qty` of the item, or (rare) one rare item in place of one of them. Nothing on a failure, or with no item
+ * What a success gives: `qty` of the item (with "perDay", already per day × days), or (rare) one rare item in place of one of them. Nothing on a failure, or with no item
  * set (the GM hands out what was found).
  * @param {{ item: ItemRef | null, rare: ItemRef | null, qty: number }} a @param {{ success: boolean, rare: boolean }} out
  * @returns {Array<{ ref: ItemRef, qty: number, rare: boolean }>}

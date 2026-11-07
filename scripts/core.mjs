@@ -10,7 +10,7 @@ import { PROFESSIONS_VERSION } from "./professions-model.mjs";
 import { defaultRanks } from "./ranks-model.mjs";
 import { RECIPES_VERSION } from "./recipes-model.mjs";
 import { defaultRules, CHOICES, HELPERS_MAX } from "./craft-model.mjs";
-import { defaultGatherRules } from "./gather-model.mjs";
+import { defaultGatherRules, DAYS_MAX } from "./gather-model.mjs";
 
 /**
  * Features: one world setting per tool (`feature-<id>`, reload). A turned-off tool registers nothing (no hooks, buttons, key
@@ -43,7 +43,7 @@ export const S = createSettings(ID, [
   { key: "craftApproval", type: "bool", default: false, label: "GM approves each craft", hint: "After the tool check, a GM card with Approve and Refuse buttons decides; nothing is made or used up until then. Off (default): the craft resolves when the roll lands, nothing waits for a GM, and a craft with no DC succeeds on the roll.", tab: "settings", feature: "crafting", onChange: fire },
   { key: "worldCoins", type: "bool", default: false, label: "Prices in the world's coins (Wanderer's Toolkit)", hint: "Show and charge crafting prices in the world's own coins (the toolkit's three-coin economy, when it is active). Off: book values (standard gold, silver and copper).", tab: "settings", feature: "crafting", onChange: fire },
   { key: "gatherRules", type: "object", default: defaultGatherRules(), hidden: true, onChange: fire },
-  { key: "gatherReset", type: "object", default: { v: 1, at: 0 }, hidden: true, onChange: fire },
+  { key: "gatherReset", type: "object", default: { v: 2, at: 0, days: null }, hidden: true, onChange: fire },
   { key: "gatherOnce", type: "bool", default: true, label: "One gather per node until reset", hint: "A character gathers once at each node (and once per scene without a node) until the GM presses Reset gathering limits, or the party travels on with Wanderer's Toolkit. Off: no limit but the node's uses.", tab: "settings", feature: "gathering", onChange: fire },
   { key: "gatherArea", type: "bool", default: true, label: "Gather without a node", hint: "A character can gather in a scene's area (its tier's DC) when no node is near. Off: only at nodes.", tab: "settings", feature: "gathering", onChange: fire },
   { key: "gatherJourney", type: "bool", default: true, label: "Travel resets gathering limits", hint: "When Wanderer's Toolkit reports a journey (hex travel or a flight), the gathering limits reset, as at a new journey stage.", tab: "settings", feature: "gathering", onChange: fire },
@@ -57,6 +57,7 @@ export const { log, warn } = createLogger(ID);
 
 const RECIPE_ID = { type: /** @type {const} */ ("string"), min: 1, max: 40, pattern: /^[a-z][a-z0-9_-]{0,39}$/ };
 const ACTOR = { type: /** @type {const} */ ("uuid"), max: 300 };
+const DAYS = { type: /** @type {const} */ ("number"), int: true, min: 1, max: DAYS_MAX };
 
 /**
  * Socket requests the leader accepts: a schema per kind; anything else is refused. Each handler (craft-leader.mjs) checks the
@@ -67,18 +68,20 @@ const ACTOR = { type: /** @type {const} */ ("uuid"), max: 300 };
  * - `craft` { actor, recipe, roll, helpers }: the owner (or a GM) after rolling the tool check; `roll` is the roll's chat message,
  *   which the leader reads (author, actor, our flag, age, not used before) instead of trusting a total.
  * - `craftDecide` { message, choice }: GM only; a choice on a pending craft card.
- * - `gather` { actor, profession, roll, node? | scene? | token? }: the owner (or a GM) after rolling the gathering check; exactly one
- *   of node (a Note's UUID), scene (gather in that scene's area) or token (harvest that creature). The leader reads the roll's
- *   message as for crafting and re-checks everything (gather-model.mjs `assessGather`).
- * - `gatherReset` {}: GM only; a non-writing GM client relays a toolkit journey (the limits reset).
+ * - `gather` { actor, profession, roll, days, node? | scene? | token? }: the owner (or a GM) after rolling the gathering check; exactly
+ *   one of node (a Note's UUID), scene (gather in that scene's area) or token (harvest that creature); `days` = days in this journey
+ *   stage (1–30; "perDay" quantity, ignored for creatures and in "flat" mode). The leader reads the roll's message as for crafting,
+ *   clamps the days and re-checks everything (gather-model.mjs `assessGather`).
+ * - `gatherReset` { days? }: GM only; a non-writing GM client relays a toolkit journey (the limits reset; `days` = the journey's
+ *   length from its hours, when it had any).
  */
 export const REQUESTS = defineRequests({
   learnRecipe: { fields: { actor: ACTOR, recipe: RECIPE_ID } },
   forgetRecipe: { fields: { actor: ACTOR, recipe: RECIPE_ID }, from: "gm" },
   craft: { fields: { actor: ACTOR, recipe: RECIPE_ID, roll: { type: "id" }, helpers: { type: "number", int: true, min: 0, max: HELPERS_MAX } } },
   craftDecide: { fields: { message: { type: "id" }, choice: { type: "string", oneOf: CHOICES } }, from: "gm" },
-  gather: { fields: { actor: ACTOR, profession: RECIPE_ID, roll: { type: "id" }, node: { ...ACTOR, optional: true }, scene: { type: "id", optional: true }, token: { ...ACTOR, optional: true } } },
-  gatherReset: { fields: {}, from: "gm" }
+  gather: { fields: { actor: ACTOR, profession: RECIPE_ID, roll: { type: "id" }, days: DAYS, node: { ...ACTOR, optional: true }, scene: { type: "id", optional: true }, token: { ...ACTOR, optional: true } } },
+  gatherReset: { fields: { days: { ...DAYS, optional: true } }, from: "gm" }
 });
 
 /** `module.json` has `"socket": true`. Automatic writes run only when `leader.isLeader()`. */

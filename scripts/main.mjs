@@ -71,9 +71,9 @@ export const API = {
       open: (/** @type {any} */ actor, /** @type {string | undefined} */ professionId) => Gathering.open(actor, professionId),
       rules: () => Data.gatherRules(),
       nodes: (/** @type {any} */ scene) => { const s = scene ?? canvas?.scene; return (s?.notes ?? []).map((/** @type {any} */ n) => ({ id: n.id, uuid: n.uuid, node: Data.nodeOf(n) })).filter((/** @type {any} */ n) => n.node && (game.user?.isGM || !n.node.hidden)); },
-      assess: (/** @type {any} */ actor, /** @type {string} */ professionId, /** @type {{ note?: any, scene?: any, token?: any }} */ target) => {
+      assess: (/** @type {any} */ actor, /** @type {string} */ professionId, /** @type {{ note?: any, scene?: any, token?: any }} */ target, /** @type {{ days?: number }} */ o = {}) => {
         const a = actorOf(actor); if (!a || !Professions.canView(a) || !target) return undefined;
-        return assessGather(gatherFacts(a, professionId, target, { isGM: !!game.user?.isGM }));
+        return assessGather(gatherFacts(a, professionId, target, { isGM: !!game.user?.isGM, days: o?.days }));
       },
       place: () => (gm() ? Nodes.arm() : undefined),
       resetLimits: () => (gm() ? Data.resetGatherLimits() : undefined)

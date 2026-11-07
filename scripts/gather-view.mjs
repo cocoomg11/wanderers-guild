@@ -8,7 +8,7 @@ import { esc } from "./const.mjs";
 import { itemSlot, UI_CLASSES } from "../vendor/wanderers-core/index.mjs";
 import { ICONS } from "./professions-model.mjs";
 import { DC_MIN, DC_MAX } from "./recipes-model.mjs";
-import { SRD_DCS, TIERS_MAX, BANDS_MAX, CREATURES_MAX, AREAS_MAX, QTY_MAX, USES_MAX, REACH_MAX, NAME_MAX, CR_MAX, GATHER_VERSION, crText } from "./gather-model.mjs";
+import { SRD_DCS, TIERS_MAX, BANDS_MAX, CREATURES_MAX, AREAS_MAX, QTY_MAX, USES_MAX, REACH_MAX, NAME_MAX, CR_MAX, DAYS_MAX, GATHER_VERSION, crText } from "./gather-model.mjs";
 
 const svg = (/** @type {string} */ d) => `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="${esc(d)}"></path></svg>`;
 const opt = (/** @type {string} */ v, /** @type {string} */ label, /** @type {boolean} */ sel) => `<option value="${esc(v)}"${sel ? " selected" : ""}>${esc(label)}</option>`;
@@ -35,15 +35,20 @@ const dcInput = (/** @type {string} */ name, /** @type {number | null} */ v, /**
  * @property {{ id: string, name: string, icon: string }} profession
  * @property {Array<{ id: string, name: string }>} professions the character's gathering professions (for the switch)
  * @property {GatherOption[]} options
+ * @property {{ value: number, max: number, hint: string } | null} [days] the *Days in this stage* field ("perDay" mode with a node or area option)
  * @property {boolean} noGM
  * @property {boolean} locked a roll is under way, or the user can't act for the character
  * @property {string} [note] a hint under the list (e.g. how to target a creature)
  */
 
-/** What an option gives, as text. @param {{ item: any, rare: any, qty: number }} a @param {number | null} margin */
+const dayWord = (/** @type {number} */ n) => `${n} day${n === 1 ? "" : "s"}`;
+/** "2 per day × 3 days". @param {number} perDay @param {number} days */
+export const perDayText = (perDay, days) => `${perDay} per day × ${dayWord(days)}`;
+
+/** What an option gives, as text. @param {{ item: any, rare: any, qty: number, perDay?: number, days?: number, perDayMode?: boolean }} a @param {number | null} margin */
 export function givesText(a, margin) {
   const parts = [];
-  if (a.item) parts.push(`${a.qty} × ${refName(a.item)}`);
+  if (a.item) parts.push(a.perDayMode ? `${perDayText(a.perDay ?? a.qty, a.days ?? 1)}: ${a.qty} × ${refName(a.item)}` : `${a.qty} × ${refName(a.item)}`);
   if (a.rare) parts.push(margin !== null ? `rare (beat the DC by ${margin}): ${refName(a.rare)}` : `rare: ${refName(a.rare)} (no rare margin set)`);
   return parts.length ? parts.join(" · ") : "no resource set: the GM hands out what you find";
 }
@@ -60,11 +65,12 @@ export function gatherWindowHTML(v) {
         <span class="wg-dim">${esc(o.gives)}</span>
         ${o.problems.map(p => `<span class="wg-gprob">${esc(p)}</span>`).join("")}</div>
       <button type="button" class="wg-gbtn" data-action="wgGatherNow" data-key="${esc(o.key)}"${o.ok && !v.locked && !v.noGM ? "" : " disabled"}>${svg(ICONS.pick.d)}${o.kind === "creature" ? "Harvest" : "Gather"}</button></li>`).join("");
+  const days = v.days ? `<label class="wg-gdays">Days in this stage <input type="number" class="wg-num" data-wg-days value="${v.days.value}" min="1" max="${v.days.max ?? DAYS_MAX}" step="1">${v.days.hint ? ` <span class="wg-dim">${esc(v.days.hint)}</span>` : ""}</label>` : "";
   const none = v.options.length ? "" : `<div class="wg-empty"><p>Nothing to gather here.</p><p class="wg-dim">Stand near a gathering node for ${esc(v.profession.name)}, or target a defeated creature to harvest it.</p></div>`;
   return `<div class="wg-prof wg-gather">
     <header class="wg-head"><span class="wg-ico" aria-hidden="true">${svg(v.profession.icon)}</span><div class="wg-grow"><h2 class="wg-ttl">${esc(v.profession.name)}</h2><p class="wg-sub">${esc(v.actorName)}</p></div>${profs}</header>
     ${v.noGM ? `<p class="wg-banner">No GM is connected: gathering waits until one joins.</p>` : ""}
-    <main class="wg-body">${none}${rows ? `<ul class="wg-list wg-glist">${rows}</ul>` : ""}
+    <main class="wg-body">${days}${none}${rows ? `<ul class="wg-list wg-glist">${rows}</ul>` : ""}
       <p class="wg-dim wg-pad">${esc(v.note ?? "The check is rolled here; the GM's client gives the items. Results go to chat.")}</p></main></div>`;
 }
 
@@ -82,6 +88,8 @@ export function gatherWindowHTML(v) {
  * @property {boolean} rare
  * @property {Array<{ name: string, img: string, qty: number, rare: boolean }>} items
  * @property {boolean} noItem a success with no resource set
+ * @property {number | null} [perDay] "perDay" mode (nodes and areas): resources per day
+ * @property {number | null} [days] "perDay" mode: days in the stage
  * @property {string} [reason]
  */
 
@@ -94,13 +102,14 @@ export function gatherCardHTML(c) {
   const img = c.items[0]?.img || "icons/svg/item-bag.svg";
   const noDc = c.dc === null && c.state === "done" ? ` <span class="wg-dim">(no DC set)</span>` : "";
   const roll = c.total === null ? "" : `<p class="wg-cline"><span>${esc(c.rollText)}</span><b>${c.total}${c.dc === null ? "" : ` vs DC ${c.dc}`}${noDc}</b></p>`;
+  const amount = c.perDay && c.days ? `<p class="wg-cline"><span>Amount</span><b>${esc(perDayText(c.perDay, c.days))}</b></p>` : "";
   const rare = c.rare ? `<p class="wg-cline"><span>Rare</span><b>beat the DC by the rare margin</b></p>` : "";
   const where = `<p class="wg-cline"><span>${c.kind === "creature" ? "Creature" : "Where"}</span><b>${esc(c.where)}${c.tierName ? ` <span class="wg-dim">· ${esc(c.tierName)}</span>` : ""}</b></p>`;
   const reason = c.reason ? `<p class="wg-creason">${esc(c.reason)}</p>` : "";
   return `<div class="${UI_CLASSES.join(" ")} wg-chat wg-chat-${esc(c.state)} wg-gcard">
     <header class="wg-chead">${itemSlot({ img, name: c.items[0]?.name ?? c.where, rarity: c.rare ? "rare" : "common", count: c.items[0]?.qty ?? 0 })}
       <div><b>${esc(head)}</b><span class="wg-dim">${esc(c.actorName)} · ${esc(c.professionName)}</span></div></header>
-    ${where}${roll}${rare}${reason}</div>`;
+    ${where}${roll}${amount}${rare}${reason}</div>`;
 }
 
 /**
@@ -120,7 +129,7 @@ export function nodeFormHTML(m) {
     ${ref("rare", n.rare, "Rare resource")}
     <label class="wg-field"><span>Tier</span><select name="tier">${opt("", `The scene's (${m.sceneTierName || "none"})`, !n.tier)}${m.tiers.map(t => opt(t.id, `${t.name}${t.dc === null ? "" : ` (DC ${t.dc})`}`, t.id === n.tier)).join("")}</select></label>
     <label class="wg-field"><span>DC</span><span>${dcInput("dc", n.dc ?? null, "DC")} <span class="wc-hint">empty: the tier's</span></span></label>
-    <label class="wg-field"><span>Per success</span><span><input type="number" class="wg-num" name="qty" value="${nv(n.qty)}" min="1" max="${QTY_MAX}" step="1"> <span class="wc-hint">empty: the Gathering page's</span></span></label>
+    <label class="wg-field"><span>Per success</span><span><input type="number" class="wg-num" name="qty" value="${nv(n.qty)}" min="1" max="${QTY_MAX}" step="1"> <span class="wc-hint">empty: the Gathering page's (per day of the stage, unless it counts flat)</span></span></label>
     <label class="wg-field"><span>Uses left</span><span><input type="number" class="wg-num" name="uses" value="${nv(n.uses)}" min="0" max="${USES_MAX}" step="1"> <span class="wc-hint">empty: unlimited; a success spends one</span></span></label>
     <label class="wg-field"><span>Needs bonus</span><span><input type="number" class="wg-num" name="minBonus" value="${nv(n.minBonus)}" min="0" max="20" step="1"> <span class="wc-hint">empty: any rank</span></span></label>
     <label class="wg-check"><input type="checkbox" name="hidden"${n.hidden ? " checked" : ""}> Hidden from players (they don't see or use it; its details still reach their browsers, so keep secrets off it)</label>
@@ -180,11 +189,12 @@ export function gatherPage(m) {
   const add = (/** @type {string} */ list, /** @type {string} */ label, /** @type {boolean} */ full) => `<button type="button" class="wc-btn wc-btn-sm" data-action="gRowAdd" data-list="${list}"${full ? " disabled" : ""}><i class="fa-solid fa-plus" aria-hidden="true"></i> ${esc(label)}</button>`;
   const table = (/** @type {string} */ cols, /** @type {string} */ body, /** @type {string} */ empty) => (body ? `<div class="wc-table-box"><table class="wc-table"><thead><tr>${cols}</tr></thead><tbody>${body}</tbody></table></div>` : `<p class="wc-hint">${esc(empty)}</p>`);
   return head + status + `<form class="wc-panel" data-form="gather" autocomplete="off"><div class="wc-panel-body wg-form">${DC_LIST}
-      <h3 class="wg-h">Tiers (DC by region)</h3>
+      <h3 class="wg-h">Tiers (DC by scene tier)</h3>
       ${table("<th>Tier</th><th>DC</th><th><span class=\"wc-sr\">Remove</span></th>", tierRows, "No tiers: only nodes with their own DC have one.")}
       <p class="wc-row">${add("tiers", "Add tier", r.tiers.length >= TIERS_MAX)}</p>
       <h3 class="wg-h">Results</h3>
       <label class="wg-field"><span>Per success</span><span><input type="number" class="wg-num" name="qty" value="${r.qty}" min="1" max="${QTY_MAX}" step="1"> <span class="wc-hint">resources a success gives (a node can set its own)</span></span></label>
+      <label class="wg-field"><span>Count</span><span><select name="qtyMode">${opt("perDay", "per day of the journey stage", r.qtyMode !== "flat")}${opt("flat", "flat (once per check)", r.qtyMode === "flat")}</select> <span class="wc-hint">per day: one check per stage gives Per success for each day of it (the Gather window's Days in this stage); harvesting a creature counts once</span></span></label>
       <label class="wg-field"><span>Rare margin</span><span><input type="number" class="wg-num" name="rareMargin" value="${nv(r.rareMargin)}" min="1" max="30" step="1"> <span class="wc-hint">beat the DC by this much and one resource is the rare one; empty: off</span></span></label>
       <label class="wg-field"><span>Reach</span><span><input type="number" class="wg-num" name="reach" value="${r.reach}" min="0" max="${REACH_MAX}" step="1"> <span class="wc-hint">grid spaces from the character's token to the node or creature; 0: any distance</span></span></label>
       <h3 class="wg-h">Gathering without a node</h3>
@@ -224,6 +234,7 @@ export function readGatherForm(entries) {
       continue;
     }
     if (["qty", "rareMargin", "reach"].includes(k)) o[k] = n(s);
+    else if (k === "qtyMode") o.qtyMode = s;
   }
   const arr = (/** @type {string} */ key) => Object.keys(lists[key]).map(Number).sort((a, b) => a - b).map(i => {
     const row = lists[key][i];

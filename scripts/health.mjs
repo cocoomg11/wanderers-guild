@@ -114,6 +114,7 @@ export function run(opts = {}) {
     h.check(add => {
       add("info", S.get("gatherOnce") ? "One gather per node (and per scene) until the limits reset." : "No per-character gathering limit (only node uses).");
       const at = Data.gatherEpoch(); add("info", at ? `Gathering limits last reset ${new Date(at).toLocaleString()}.` : "Gathering limits never reset.");
+      const days = Data.journeyDays(); if (days) add("info", `The last journey took ${days} day${days === 1 ? "" : "s"}: the Gather window's Days in this stage starts there.`);
       const tk = game.modules.get(TOOLKIT_ID)?.active;
       if (S.get("gatherJourney")) add("info", tk ? "A Wanderer's Toolkit journey resets the gathering limits." : "Travel resets gathering limits is on, but Wanderer's Toolkit isn't active (reset by hand on the Gathering page).");
     });
