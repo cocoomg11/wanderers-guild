@@ -71,7 +71,9 @@ export class GatherApp extends Base {
         .filter(x => x.n.note.uuid === this.focus || isGM || !rules.reach || (x.d !== null && x.d <= rules.reach + 0.5))
         .sort((a, b) => (a.n.note.uuid === this.focus ? -1 : b.n.note.uuid === this.focus ? 1 : (a.d ?? 1e9) - (b.d ?? 1e9)));
       for (const x of near.slice(0, 5)) list.push({ key: `node:${x.n.note.uuid}`, target: { note: x.n.note } });
-      if (!near.length && S.get("gatherArea")) list.push({ key: `area:${scene.id}`, target: { scene } });
+      // Area gathering when no node is really within reach (a GM sees every node, so reach is measured for GMs too).
+      const inReach = near.some(x => !rules.reach || (x.d !== null && x.d <= rules.reach + 0.5));
+      if (!inReach && S.get("gatherArea")) list.push({ key: `area:${scene.id}`, target: { scene } });
     }
     const tok = creatureToken(this.actor);
     if (tok) list.push({ key: `creature:${tok.uuid}`, target: { token: tok } });

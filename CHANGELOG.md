@@ -8,18 +8,19 @@ All notable changes to Wanderer's Guild. Versions follow the `version` in `modul
 
 - The Gather window couldn't be drawn ("this.options is not a function"): one of its methods shadowed the window's own `options`. Renamed; a repo test now stops window classes from defining methods with Foundry's window property names.
 - Gathered and crafted consumables and loot now join the character's stack of the same item. A world item copied onto a character keeps no link back to its source, so every result made a new stack; the stack is now found by source, else by the same type and name (`stackOf` in craft-model.mjs, used by both).
+- The Gather window offers *Gather in the area* whenever no node of that profession is within reach. A GM sees every node on the scene, so for a GM the area option never appeared on a scene with nodes.
 
 ### Checked live (Foundry 14.370, dnd5e 6.0.6, toolkit 2.3.0)
 
 - Starter set, Professions window, toolkit sheet page (bookmark, Craft button), setup window, health report.
 - A craft: Herbalism Kit check 16 vs DC 10 made the item, used up 2 of 3 materials and posted the card; with 1 left the window shows "missing" and Craft is disabled.
 - Placing a gathering node (Journal Notes controls › Gathering node, item by UUID), the scene's Table Tools tier field.
-- With the Gather window patched in memory: gathering at a node (Survival 14 vs DC 12, "1 per day × 3 days" gave 3), the once-per-node limit and the GM reset, harvesting a defeated CR 1/4 plant (21 vs DC 8; marked for Herbalism, a second harvest refused).
+- With the Gather window patched in memory: gathering at a node (Survival 14 vs DC 12, "1 per day × 3 days" gave 3), the once-per-node limit and the GM reset, harvesting a defeated CR 1/4 plant (21 vs DC 8; marked for Herbalism, a second harvest refused), a rare result (22 vs DC 3 with margin 5: 1 rare + 1 common out of 2 days), the scene tier's DC for area gathering (`api.gathering.assess`: DC 5, Tier 2).
 
 ### Untested in Foundry
 
 - [ ] The new stacking (gathered and crafted results join an existing stack of the same name and type).
-- [ ] A rare result (beat the DC by the margin), area gathering by scene tier, the days prefill after a toolkit journey, a player's client (all checks above ran as GM).
+- [ ] The *Gather in the area* button away from nodes (as GM and as a player), the days prefill after a toolkit journey, a player's client (all checks above ran as GM).
 
 ## 0.3.0 (2026-11-06)
 
