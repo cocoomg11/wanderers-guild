@@ -128,7 +128,7 @@ async function apply(actor, recipe, a, success) {
     const doc = await fromUuid(recipe.result.uuid);
     if (!doc || doc.documentName !== "Item") throw new Error("The result item can't be found.");
     const qty = recipe.result.qty;
-    const stack = ["consumable", "loot"].includes(doc.type) ? inv.find(i => i.sources.includes(doc.uuid) && !plan.deletes.includes(i.id)) : null;
+    const stack = CM.stackOf(inv, { uuid: doc.uuid, name: doc.name, type: doc.type }, plan.deletes);
     if (stack) {
       const left = plan.updates.find(u => u._id === stack.id)?.["system.quantity"] ?? stack.qty;
       plan.updates = plan.updates.filter(u => u._id !== stack.id);

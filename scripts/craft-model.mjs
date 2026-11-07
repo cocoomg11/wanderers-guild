@@ -232,6 +232,18 @@ export function matches(item, m) {
   return !!m.name && fold(item.name) === fold(m.name);
 }
 
+/**
+ * The carried stack a new result joins: only consumables and loot stack; the same source UUID first, else an item of the same
+ * type and name (a world item copied onto a character keeps no link to its source, so results made later must still find it).
+ * @param {InvItem[]} inv @param {{ uuid: string, name: string, type: string }} result @param {string[]} [skip] ids not to use
+ * @returns {InvItem | null}
+ */
+export function stackOf(inv, result, skip = []) {
+  if (!["consumable", "loot"].includes(result.type)) return null;
+  const pool = inv.filter(i => !skip.includes(i.id) && i.type === result.type);
+  return pool.find(i => i.sources.includes(result.uuid)) ?? pool.find(i => !!result.name && fold(i.name) === fold(result.name)) ?? null;
+}
+
 /** How many of a material the character carries. @param {InvItem[]} inv @param {import("./recipes-model.mjs").Material} m */
 export const haveOf = (inv, m) => inv.filter(i => matches(i, m)).reduce((t, i) => t + Math.max(0, i.qty), 0);
 

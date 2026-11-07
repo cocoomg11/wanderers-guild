@@ -12,6 +12,7 @@ import { S, leader, log, warn } from "./core.mjs";
 import * as GM from "./gather-model.mjs";
 import * as Data from "./data.mjs";
 import * as D5 from "./dnd5e.mjs";
+import { stackOf } from "./craft-model.mjs";
 import { gatherFacts, rollLabel } from "./gather-read.mjs";
 import { gatherCardHTML } from "./gather-view.mjs";
 
@@ -61,13 +62,13 @@ function readRoll(msg, user, actor, profession, target) {
 }
 
 /**
- * Adds `qty` of an item to the actor: onto a consumable / loot stack from the same item, else as a new item.
+ * Adds `qty` of an item to the actor: onto a consumable / loot stack of the same item (source, else type and name), else as a new item.
  * @param {any} actor @param {GM.ItemRef} ref @param {number} qty
  */
 async function addItem(actor, ref, qty) {
   const doc = await fromUuid(ref.uuid);
   if (!doc || doc.documentName !== "Item") throw new Error(`The item ${ref.name || ref.uuid} can't be found.`);
-  const stack = ["consumable", "loot"].includes(doc.type) ? D5.inventory(actor).find(i => i.sources.includes(doc.uuid)) : null;
+  const stack = stackOf(D5.inventory(actor), { uuid: doc.uuid, name: doc.name, type: doc.type });
   if (stack) { await actor.updateEmbeddedDocuments("Item", [{ _id: stack.id, "system.quantity": stack.qty + qty }]); return { name: doc.name, img: doc.img }; }
   const data = doc.pack ? game.items.fromCompendium(doc) : doc.toObject();
   delete data._id;

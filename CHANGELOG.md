@@ -13,10 +13,12 @@ All notable changes to Wanderer's Guild. Versions follow the `version` in `modul
 - Starter set, Professions window, toolkit sheet page (bookmark, Craft button), setup window, health report.
 - A craft: Herbalism Kit check 16 vs DC 10 made the item, used up 2 of 3 materials and posted the card; with 1 left the window shows "missing" and Craft is disabled.
 - Placing a gathering node (Journal Notes controls › Gathering node, item by UUID), the scene's Table Tools tier field.
+- With the Gather window patched in memory: gathering at a node (Survival 14 vs DC 12, "1 per day × 3 days" gave 3), the once-per-node limit and the GM reset, harvesting a defeated CR 1/4 plant (21 vs DC 8; marked for Herbalism, a second harvest refused).
 
 ### Untested in Foundry
 
-- [ ] Everything in 0.3.0's list that needs the Gather window: gathering at a node and in an area, rare results, days per stage, harvesting a creature, limits and resets.
+- [ ] The new stacking (gathered and crafted results join an existing stack of the same name and type).
+- [ ] A rare result (beat the DC by the margin), area gathering by scene tier, the days prefill after a toolkit journey, a player's client (all checks above ran as GM).
 
 ## 0.3.0 (2026-11-06)
 

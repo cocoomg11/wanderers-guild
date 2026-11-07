@@ -143,3 +143,18 @@ test("materials from the inventory: typed names match carried items, the notice 
   assert.match(C.usesNotice(a.materials, { fail: "lose", charge: true, approval: true }), /Weak Flux, the coin cost \(taken when the GM decides/);
   assert.equal(C.usesNotice([], { fail: "lose" }), "Crafting uses up nothing from the inventory.");
 });
+
+test("stackOf: source first, then same type and name; only consumables and loot; skips ids", () => {
+  const inv = [
+    { id: "a", name: "Peacebloom", qty: 1, type: "loot", sources: ["Actor.x.Item.a"] },
+    { id: "b", name: "Peacebloom", qty: 3, type: "loot", sources: ["Actor.x.Item.b", "Item.world"] },
+    { id: "c", name: "Peacebloom", qty: 1, type: "consumable", sources: ["Actor.x.Item.c"] },
+    { id: "d", name: "Sword", qty: 1, type: "weapon", sources: ["Item.sword"] }
+  ];
+  assert.equal(C.stackOf(inv, { uuid: "Item.world", name: "Peacebloom", type: "loot" })?.id, "b");
+  assert.equal(C.stackOf(inv, { uuid: "Item.other", name: "  peacebloom ", type: "loot" })?.id, "a");
+  assert.equal(C.stackOf(inv, { uuid: "Item.other", name: "Peacebloom", type: "consumable" })?.id, "c");
+  assert.equal(C.stackOf(inv, { uuid: "Item.sword", name: "Sword", type: "weapon" }), null);
+  assert.equal(C.stackOf(inv, { uuid: "Item.world", name: "Peacebloom", type: "loot" }, ["b"])?.id, "a");
+  assert.equal(C.stackOf(inv, { uuid: "Item.none", name: "Silverleaf", type: "loot" }), null);
+});
