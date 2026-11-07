@@ -174,3 +174,9 @@
 .wg-chat .wg-cbtns { display: flex; gap: 4px; flex-wrap: wrap; }
 .wg-chat .wg-dim { opacity: 0.75; font-size: 11px; }
 .wg-chat-line { margin: 0; }
+
+/* ---------------------------------------------------------------- Professions page on the Wanderer's Toolkit sheet (0.3.0) */
+.wg-prof.wg-page { height: auto; min-height: 0; border-radius: 4px; }
+.wg-prof.wg-page .wg-body { overflow: visible; padding: 8px 4px; }
+.wg-prof.wg-page .wg-pagesub { padding: 6px 8px 0; }
+.wg-prof.wg-page .wg-grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }

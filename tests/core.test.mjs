@@ -32,7 +32,8 @@ test("request schemas: what each kind accepts and refuses", () => {
 // core.mjs binds core to this module. These definitions throw on a typo (duplicate key, bad type, a need that isn't a feature), so
 // importing them here catches the mistake in CI instead of in a live world.
 test("features, settings and requests are well formed", () => {
-  assert.deepEqual(F.FEATURES.map(f => f.id), ["professions", "sheetButton", "crafting"]);
+  assert.deepEqual(F.FEATURES.map(f => f.id), ["professions", "sheetButton", "crafting", "toolkitPage"]);
+  assert.deepEqual(F.FEATURES.find(f => f.id === "toolkitPage").needs, ["professions"]);
   assert.deepEqual(F.FEATURES.find(f => f.id === "crafting").needs, ["professions"]);
   assert.ok(F.FEATURES.every(f => f.key === `feature-${f.id}`));
   assert.deepEqual(F.FEATURES.find(f => f.id === "sheetButton").needs, ["professions"]);

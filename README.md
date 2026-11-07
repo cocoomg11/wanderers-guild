@@ -46,6 +46,7 @@ In Foundry's **Add-on Modules › Install Module**, paste the manifest URL:
 | Professions window | owners, observers, GM | One character's professions: a card per crafting or gathering profession (rank, ladder, linked tool, highest rarity, next rank), the other professions as a list, and (switch) the ones not learned yet. Read only. |
 | Setup window | GM | Professions (definitions), Ranks (rank names and rarities per proficiency bonus), Recipes, Crafting rules, Settings, Health check, Data (remove the module's data). |
 | Sheet button | owners, observers | The hammer button in the header of dnd5e character sheets. |
+| Toolkit sheet page | owners, observers | With [Wanderer's Toolkit](https://github.com/cocoomg11/wayfarers-toolkit) 2.3.0 or later and its character sheet on: a **Professions** bookmark on the toolkit's sheet, showing the same cards and buttons as the window. |
 | Crafting window | owners (observers look), GM | Per character and profession. **Craft**: recipes with materials have / need from the character's inventory, rank check, tool check and DC, time (for reference only: the calendar is never advanced), cost, and what the craft will use up; Craft rolls the tool check and the active GM's client uses up the materials (on a failure too, by default) and makes the item. **Recipes**: learn (players, when allowed), teach and forget (GM). |
 | Recipes, Crafting rules | GM | Setup window pages: the world's recipes, and every crafting number (empty until you fill them in), each with Import / export JSON. |
 
@@ -59,6 +60,7 @@ Feature switches (Game Settings › Wanderer's Guild; each reloads Foundry):
 | --- | --- | --- |
 | Feature: Professions | on | no windows, no setup menu, `api.open` / `api.setup` / `api.definitions` / `api.professionsOf` are undefined |
 | Feature: Sheet button | on | no header button on character sheets (also off when Professions is off) |
+| Feature: Toolkit sheet page | on | no Professions page on Wanderer's Toolkit's character sheet (the window and header button stay) |
 | Feature: Crafting | on | no Craft or Recipes buttons, no Crafting window, no Recipes or Crafting rules pages, no crafting requests or chat card buttons; `api.crafting` is undefined (also off when Professions is off) |
 
 On the setup window's **Settings** page (instant):
@@ -96,6 +98,8 @@ On the setup window's **Settings** page (instant):
 - `wanderers-guild.crafted` (experimental): fired on the active GM's client after a craft is decided, with ids only: `{ actorId, recipeId, success, messageId }` (the chat card). Not fired for refused crafts or errors.
 
 Stable members keep their name and shape within a major version; experimental ones may change in any release.
+
+With Wanderer's Toolkit 2.3.0 or later (its character sheet on) and *Feature: Toolkit sheet page* on, each client adds the page `wanderers-guild.professions` (order 85, between the toolkit's Bastion and Special traits) through the toolkit's `api.sheet.registerPage`, at our ready or on its `wayfarers-toolkit.sheetReady` hook. Nothing is stored for it.
 
 With the Wanderer's Satchel installed, the module registers itself there (Open = the setup window, its health check, its Debug logging switch).
 

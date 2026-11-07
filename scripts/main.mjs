@@ -13,6 +13,7 @@ import * as Data from "./data.mjs";
 import * as D5 from "./dnd5e.mjs";
 import * as Crafting from "./crafting.mjs";
 import * as CraftLeader from "./craft-leader.mjs";
+import * as SheetPage from "./sheet-page.mjs";
 import { context, assessIn } from "./craft-read.mjs";
 import { registration, registerWith, SATCHEL_ID } from "./satchel-model.mjs";
 
@@ -81,6 +82,7 @@ Hooks.once("init", () => {
 Hooks.once("ready", () => {
   isReady = true;
   if (F.on("crafting")) CraftLeader.registerHandlers();
+  if (F.on("toolkitPage")) SheetPage.ready();
   leader.start();
   if (!D5.isDnd5e() && game.user?.isGM) ui.notifications.warn(`${TITLE} needs the dnd5e system; this world runs ${game.system?.id}.`);
   // Optional: show up in the Wanderer's Satchel hub when it is installed.

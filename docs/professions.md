@@ -48,3 +48,7 @@ Game Settings › Configure Settings › Wanderer's Guild › **Open setup**, or
 - **Data**: remove what the module stored, after a dry run and the word REMOVE.
 
 Players can read the definitions (their windows need them), so keep secrets out of a profession's note.
+
+## On the Wanderer's Toolkit sheet
+
+With Wanderer's Toolkit 2.3.0 or later active and its character sheet replacement on, the toolkit's sheet gets a **Professions** bookmark (after Bastion, before Special traits). The page shows the same cards, lists and buttons as the Professions window (Craft, Recipes, Gather), inside the sheet's dark palette, plus a link to open the window. It redraws when the character changes and when the GM changes the professions or ranks. Turn it off with *Feature: Toolkit sheet page* (Game Settings); the window and the header button stay either way. The health check says whether the page is registered, and why not.

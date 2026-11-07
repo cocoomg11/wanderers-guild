@@ -18,11 +18,13 @@ test("Professions window: cards, rows, placeholders, escaping", () => {
   assert.ok(html.includes(`data-what="recipes"`));
   const off = PV.professionsHTML(C.professionsView({ name: "M", pb: 3, tools: { smith: 1, herb: 1 } }, defs, undefined, {}));
   assert.ok(!off.includes("wgCraft"), "Crafting off: no Craft or Recipes buttons");
-  assert.equal((off.match(/data-action="wgComing"/g) ?? []).length, 1, "Gather stays a placeholder");
-  assert.equal(PV.actionOf("gather"), "wgComing");
+  assert.ok(!off.includes("wgGather") && !off.includes("wgComing"), "Gathering off: no Gather button");
+  const gather = PV.professionsHTML(C.professionsView({ name: "M", pb: 3, tools: { herb: 1 } }, defs, undefined, { gathering: true }));
+  assert.equal((gather.match(/data-action="wgGather"/g) ?? []).length, 1, "Herbalism: Gather");
+  assert.equal(PV.actionOf("gather"), "wgGather");
   assert.ok(html.includes(`aria-current="step"`));
   assert.ok(html.includes("Not learned"));
-  assert.ok(html.includes("Crafting results are posted to chat"));
+  assert.ok(html.includes("Crafting and gathering results are posted to chat"));
   assert.ok(!/wc-r\d/.test(html), "no literal core revision");
 });
 

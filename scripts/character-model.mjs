@@ -87,12 +87,12 @@ export function characterProfessions(facts, storedProfessions, storedRanks, labe
  * @param {CharacterFacts} facts
  * @param {unknown} storedProfessions
  * @param {unknown} storedRanks
- * @param {{ labels?: Labels, showUnlearned?: boolean, isGM?: boolean, crafting?: boolean }} [opts] `crafting`: the Crafting feature is
- *   on (else the Craft and Recipes buttons are left out)
+ * @param {{ labels?: Labels, showUnlearned?: boolean, isGM?: boolean, crafting?: boolean, gathering?: boolean }} [opts] `crafting`: the
+ *   Crafting feature is on (else the Craft and Recipes buttons are left out); `gathering`: the Gathering feature is on (else no Gather)
  */
 export function professionsView(facts, storedProfessions, storedRanks, opts = {}) {
   const all = characterProfessions(facts, storedProfessions, storedRanks, opts.labels)
-    .map(p => (opts.crafting ? p : { ...p, actions: p.actions.filter(a => a.id === "gather") }));
+    .map(p => ({ ...p, actions: p.actions.filter(a => (a.id === "gather" ? !!opts.gathering : !!opts.crafting)) }));
   const pb = facts.pb === null || facts.pb === undefined || !Number.isFinite(Number(facts.pb)) ? null : Number(facts.pb);
   const learned = all.filter(p => p.learned);
   return {

@@ -18,7 +18,8 @@ import { defaultRules, CHOICES, HELPERS_MAX } from "./craft-model.mjs";
 export const F = createFeatures(ID, [
   { id: "professions", label: "Professions", hint: "A Professions window per character: professions from the character's tool proficiencies, rank from the proficiency bonus. The GM setup window and api.open(actor)." },
   { id: "sheetButton", label: "Sheet button", hint: "A Professions button in the header of dnd5e character sheets (owners and observers).", needs: ["professions"] },
-  { id: "crafting", label: "Crafting", hint: "Recipes and the Crafting window: the Craft and Recipes buttons roll the linked tool check, and the active GM's client makes the item and uses up the materials.", needs: ["professions"] }
+  { id: "crafting", label: "Crafting", hint: "Recipes and the Crafting window: the Craft and Recipes buttons roll the linked tool check, and the active GM's client makes the item and uses up the materials.", needs: ["professions"] },
+  { id: "toolkitPage", label: "Toolkit sheet page", hint: "A Professions page (bookmark) on Wanderer's Toolkit's character sheet, when the toolkit (2.3.0 or later) is active with its sheet on. The Professions window stays.", needs: ["professions"] }
 ], { title: TITLE, where: "Game Settings" });
 
 /** Called after the definitions or the rank table change on this client (any GM's edit reaches every client). */

@@ -13,6 +13,8 @@ import * as D5 from "./dnd5e.mjs";
 import * as Data from "./data.mjs";
 import * as RC from "./recipes-model.mjs";
 import * as CM from "./craft-model.mjs";
+import * as SheetPage from "./sheet-page.mjs";
+import { pageStatus } from "./sheet-page-model.mjs";
 
 /** Clamp for the caller's per-check budget (the Satchel passes its own). @param {unknown} ms */
 export const timeoutOf = ms => Math.min(300000, Math.max(1000, Number(ms) || 20000));
@@ -92,6 +94,9 @@ export function run(opts = {}) {
   h.check(add => {
     const tk = game.modules.get(TOOLKIT_ID);
     add("info", tk?.active ? `Wanderer's Toolkit ${tk.version} is active (crafting prices can use its coins: setup › Settings).` : "Wanderer's Toolkit is not active (not needed).");
+    const st = SheetPage.status();
+    const line = pageStatus({ feature: F.on("toolkitPage"), toolkit: st.toolkit, toolkitVersion: st.toolkitVersion, sheet: st.sheet, result: st.result });
+    add(line.level, line.text);
     const ip = game.modules.get("item-piles");
     add("info", ip?.active ? `Item Piles ${ip.version} is active.` : "Item Piles is not active (not needed).");
   });

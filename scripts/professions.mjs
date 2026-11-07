@@ -23,13 +23,35 @@ export function setSetupOpener(fn) { openSetup = fn; }
 let openCrafting = null;
 /** @param {(actor: any, professionId: string, mode: "craft" | "recipes") => unknown} fn */
 export function setCraftingOpener(fn) { openCrafting = fn; }
+/** Opens the Gather dialog (set by main.mjs when the Gathering feature is on). @type {((actor: any, professionId: string) => unknown) | null} */
+let openGather = null;
+/** @param {(actor: any, professionId: string) => unknown} fn */
+export function setGatherOpener(fn) { openGather = fn; }
+
+/**
+ * What a profession button does, for the window and the toolkit sheet page alike: `wgCraft` (Craft / Recipes), `wgGather`, `wgSetup`,
+ * `wgWindow` (the page's link to this window) and `wgComing` (a placeholder).
+ * @param {any} actor @param {string} act @param {{ prof?: string, what?: string }} data the button's dataset
+ */
+export function runAction(actor, act, data = {}) {
+  const prof = String(data.prof ?? "");
+  if (act === "wgCraft") return openCrafting?.(actor, prof, data.what === "recipes" ? "recipes" : "craft");
+  if (act === "wgGather") return openGather?.(actor, prof);
+  if (act === "wgSetup") return openSetup();
+  if (act === "wgWindow") return open(actor);
+  if (act === "wgComing") {
+    const label = data.what === "gather" ? "Gathering" : data.what === "recipes" ? "Recipes" : "Crafting";
+    ui.notifications.info(`${TITLE}: ${label}. ${COMING}`);
+  }
+  return undefined;
+}
 
 /** Whether this user may see the actor's professions. @param {any} actor */
 export const canView = actor => !!actor && (game.user?.isGM || actor.testUserPermission?.(game.user, "OBSERVER"));
 
 /** The model for one actor (also `api.professionsOf(actor)`). @param {any} actor */
 export function viewOf(actor) {
-  return professionsView(D5.facts(actor), S.get("professionList"), S.get("rankTable"), { labels: D5.labels(), showUnlearned: !!S.get("showUnlearned"), isGM: !!game.user?.isGM, crafting: !!openCrafting });
+  return professionsView(D5.facts(actor), S.get("professionList"), S.get("rankTable"), { labels: D5.labels(), showUnlearned: !!S.get("showUnlearned"), isGM: !!game.user?.isGM, crafting: !!openCrafting, gathering: !!openGather });
 }
 
 const Base = RememberedWindow(foundry.applications.api.ApplicationV2, { moduleId: ID, key: "professions" });
@@ -50,8 +72,9 @@ export class ProfessionsApp extends Base {
     window: { title: "Professions", icon: "fa-solid fa-hammer", resizable: true },
     position: { width: 760, height: 720 },
     actions: {
-      wgComing: ProfessionsApp.#coming,
-      wgCraft: ProfessionsApp.#craft,
+      wgComing: ProfessionsApp.#act,
+      wgCraft: ProfessionsApp.#act,
+      wgGather: ProfessionsApp.#act,
       wgSetup: () => openSetup()
     }
   };
@@ -79,16 +102,8 @@ export class ProfessionsApp extends Base {
   _onClose(options) { super._onClose?.(options); if (OPEN.get(this.actor?.id) === this) OPEN.delete(this.actor.id); }
 
   /** @this {ProfessionsApp} @param {PointerEvent} _event @param {HTMLElement} target */
-  static #craft(_event, target) {
-    const prof = target?.dataset?.prof ?? "";
-    openCrafting?.(this.actor, prof, target?.dataset?.what === "recipes" ? "recipes" : "craft");
-  }
-
-  /** @param {PointerEvent} _event @param {HTMLElement} target */
-  static #coming(_event, target) {
-    const what = target?.dataset?.what ?? "";
-    const label = what === "gather" ? "Gathering" : what === "recipes" ? "Recipes" : "Crafting";
-    ui.notifications.info(`${TITLE}: ${label}. ${COMING}`);
+  static #act(_event, target) {
+    runAction(this.actor, String(target?.dataset?.action ?? ""), { prof: target?.dataset?.prof, what: target?.dataset?.what });
   }
 }
 

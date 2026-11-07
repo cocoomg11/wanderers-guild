@@ -5,6 +5,7 @@ All notable changes to Wanderer's Guild. Versions follow the `version` in `modul
 ## 0.3.0 (unreleased)
 
 - Built on wanderers-core 0.6.0 (guest pages; nothing else changed). CI runs core's `module-checks.yml@v0.6.0`.
+- **Professions page on the Wanderer's Toolkit sheet** (*Feature: Toolkit sheet page*, on; needs Professions): with the toolkit 2.3.0 or later and its character sheet on, a Professions bookmark (order 85) shows the same view as the window, with its Craft / Recipes / Gather buttons (wired by `data-wg-act`, never the sheet's `data-action`) and a link to the window. Registered on every client at our ready (when the toolkit's `api.sheet` is already there) and on the toolkit's `wayfarers-toolkit.sheetReady` hook; our data changes call the page's `refresh()`. Health: the page is registered, or why not. The window and the header button stay.
 
 ## 0.2.0 (unreleased)
 
