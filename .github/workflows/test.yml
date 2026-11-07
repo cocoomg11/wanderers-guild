@@ -15,6 +15,6 @@ jobs:
   # the JSDoc type check (tsc) and the unit tests. package.json lists eslint and typescript as exact devDependencies, with a
   # committed package-lock.json. Keep the tag equal to the pinned core version (wanderers-core.lock.json).
   checks:
-    uses: cocoomg11/wanderers-core/.github/workflows/module-checks.yml@v0.5.2
+    uses: cocoomg11/wanderers-core/.github/workflows/module-checks.yml@v0.6.0
     with:
       types: true

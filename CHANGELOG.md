@@ -2,6 +2,10 @@
 
 All notable changes to Wanderer's Guild. Versions follow the `version` in `module.json`.
 
+## 0.3.0 (unreleased)
+
+- Built on wanderers-core 0.6.0 (guest pages; nothing else changed). CI runs core's `module-checks.yml@v0.6.0`.
+
 ## 0.2.0 (unreleased)
 
 Second slice: recipes and crafting. Gathering is still a placeholder.
