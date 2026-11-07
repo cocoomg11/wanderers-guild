@@ -7,11 +7,13 @@
  *
  * The tool check is rolled on the crafter's client (dnd5e `rollToolCheck`); the request names the roll's chat message and the leader
  * reads the total from that message (author = the sender, our flag names this actor and recipe, at most ROLL_MAX_AGE_MS old, not used
- * before; then it is marked used) and resolves the craft at once: the materials are taken from the inventory (on a failure too,
+ * before, by its flag and by the leader's in-memory list; then it is marked used; a player's roll must also be one d20 plus the
+ * character's own tool bonus, roll-model.mjs `verifyRoll`) and resolves the craft at once: the materials are taken from the inventory (on a failure too,
  * unless the rules keep them), and on a success the item is made. A craft with no DC set anywhere succeeds on the roll. Nothing waits
  * for a GM unless *GM approves each craft* is on. If the materials (or the coin) are gone by then, the craft is refused and nothing is
- * used. Crafts for one character are handled one after another, so two rolls can't spend the same stack. As with any Foundry roll, a
- * client can't be prevented from forging one: turn on *GM approves each craft* if that matters at your table.
+ * used. Crafts for one character are handled one after another, so two rolls can't spend the same stack. The d20's face itself can
+ * still be forged by a client (as with any Foundry roll): turn on *GM approves each craft* if that matters at your table (then a
+ * roll that can't be checked goes to the GM's card with the reason instead of being refused).
  *
  * Writes: `flags.wanderers-guild.recipes` on actors (known recipes), the crafted item (created, or added to a matching stack), the
  * materials' quantities (lowered or deleted), the coin cost (`system.currency`, or the toolkit's `pay`), `flags.wanderers-guild.rollUsed`
@@ -24,11 +26,14 @@ import * as RC from "./recipes-model.mjs";
 import * as Data from "./data.mjs";
 import * as D5 from "./dnd5e.mjs";
 import * as Eco from "./economy.mjs";
+import { verifyRoll, usedRolls } from "./roll-model.mjs";
 import { context, assessIn } from "./craft-read.mjs";
 import { cardHTML } from "./crafting-view.mjs";
 
 /** Roll messages being handled (a second request for the same roll waits its turn and then finds it used). */
 const BUSY = new Set();
+/** Roll messages already used, kept on the leader for ROLL_MAX_AGE_MS (the message's `rollUsed` flag can be unset by its author). */
+const USED = usedRolls(CM.ROLL_MAX_AGE_MS);
 /** The last queued craft per actor UUID: crafts for one character run one after another. @type {Map<string, Promise<unknown>>} */
 const QUEUE = new Map();
 
@@ -102,7 +107,7 @@ function readRoll(msg, user, actor, recipeId) {
   const authorId = msg.author?.id ?? msg.user?.id;
   if (authorId !== user.id) return { error: "That roll isn't yours." };
   const f = msg.flags?.[ID] ?? {};
-  if (f.rollUsed) return { error: "That roll was already used for a craft." };
+  if (f.rollUsed || USED.has(msg.id)) return { error: "That roll was already used for a craft." };
   if (f.craftRoll?.recipe !== recipeId || f.craftRoll?.actor !== actor.uuid) return { error: "That roll wasn't made for this craft." };
   if (Date.now() - Number(msg.timestamp ?? 0) > CM.ROLL_MAX_AGE_MS) return { error: "That roll is too old; roll again." };
   const total = Number(msg.rolls?.[0]?.total);
@@ -178,9 +183,15 @@ async function craftNow(data, user) {
   const msg = game.messages.get(data.roll);
   const roll = readRoll(msg, user, actor, recipe.id);
   if ("error" in roll) return tell(user, actor, `${recipe.name}: ${roll.error}`);
+  USED.add(msg.id);
   await msg.setFlag(ID, "rollUsed", true);
   const a = assessIn(context(actor), recipe, data.helpers);
   const rules = Data.rules();
+  // A player's roll must be the tool check with the character's own bonus (a GM's is trusted). With *GM approves each craft* on,
+  // a roll that can't be checked goes to the GM's card with the reason instead of being refused.
+  const bad = a.canCraft && a.tool && !user.isGM ? verifyRoll(D5.rollFacts(msg), { kind: "tool", key: a.tool.key, ...D5.checkBonus(actor, "tool", a.tool.key) }) : null;
+  const unchecked = bad && !bad.ok ? bad.error : "";
+  if (unchecked && !S.get("craftApproval")) return tell(user, actor, `${recipe.name}: nothing was made or used up. ${unchecked}`);
   const st = { v: CM.CARD_VERSION, state: "pending", actor: actor.uuid, recipe: recipe.id, user: user.id, roll: data.roll, tool: a.tool?.key ?? "", total: roll.total, dc: a.dc, helpers: data.helpers, whisper: roll.whisper, approval: !!S.get("craftApproval"), timeText: CM.hoursText(a.hours, rules.hoursPerDay), at: Date.now() };
   if (!a.canCraft) {
     st.state = "refused";
@@ -188,7 +199,7 @@ async function craftNow(data, user) {
   }
   if (st.approval) {
     log(`craft ${recipe.name}: waiting for the GM's approval`);
-    return postCard(actor, st, cardView(st, { actor, recipe }), [...new Set([user.id, ...gmIds()])]);
+    return postCard(actor, st, cardView(st, { actor, recipe, reason: unchecked ? `Roll not checked: ${unchecked}` : "" }), [...new Set([user.id, ...gmIds()])]);
   }
   await finish(actor, recipe, a, st, CM.outcome(roll.total, a.dc), null);
 }

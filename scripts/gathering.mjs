@@ -57,8 +57,11 @@ export class GatherApp extends Base {
 
   get title() { return `Gather: ${this.actor?.name ?? ""}`; }
 
-  /** Days in this journey stage: what the user typed, else the last journey's (from the reset record), else 1. */
-  get days() { return GM.clampDays(this.daysTyped ?? Data.journeyDays() ?? 1); }
+  /**
+   * Days in this journey stage: what the user typed, else the last journey's (from the reset record), else 1. For a player, at most
+   * the last journey's length (1 without one), as the leader allows (`allowedDays`).
+   */
+  get days() { return GM.allowedDays(this.daysTyped ?? Data.journeyDays() ?? 1, { isGM: !!game.user?.isGM, journeyDays: Data.journeyDays() }); }
 
   /** The options shown: [{ option, target }]. */
   targets() {
@@ -93,7 +96,7 @@ export class GatherApp extends Base {
     });
     const journey = Data.journeyDays();
     const daysField = perDay && options.some(o => o.kind !== "creature")
-      ? { value: days, max: GM.DAYS_MAX, hint: this.daysTyped === null && journey ? "from the last journey" : "" } : null;
+      ? { value: days, max: isGM ? GM.DAYS_MAX : GM.clampDays(journey ?? 1), hint: isGM ? (this.daysTyped === null && journey ? "from the last journey" : "") : journey ? `at most ${journey} (the last journey)` : "1 (no journey yet)" } : null;
     return {
       actorName: this.actor.name, profession: { id: this.professionId, name: p?.name ?? this.professionId, icon: ICONS[p?.icon ?? "pick"]?.d ?? ICONS.pick.d },
       professions: profs.map(x => ({ id: x.id, name: x.name })), options, days: daysField, noGM: !leader.activeGM(), locked: this.busy || !canUse(this.actor),
@@ -177,6 +180,18 @@ export function refresh(actorId) {
   for (const [id, app] of OPEN) if (!actorId || id === actorId) { try { app.render(); } catch { /* closing */ } }
 }
 
+/** @type {((...args: any[]) => void) | null} */
+let redrawAll = null;
+/**
+ * Redraws every open Gather window, at most once per 100 ms (`foundry.utils.debounce`): HP changes, token control and targeting
+ * come in bursts (a fight, a drag-select). Bails at once when no Gather window is open.
+ */
+export function refreshSoon() {
+  if (!OPEN.size) return;
+  redrawAll ??= foundry.utils.debounce(() => { if (OPEN.size) refresh(); }, 100);
+  redrawAll?.();
+}
+
 /** A node double-clicked: GM → the editor; player → the Gather window for their character. @param {any} note */
 function onNodeOpen(note) {
   if (game.user?.isGM) return Nodes.edit(note).catch(e => console.warn(`${ID} | node`, e));
@@ -249,10 +264,10 @@ export function init() {
   Hooks.on("updateActor", (/** @type {any} */ actor, /** @type {any} */ changes) => {
     if (!OPEN.size) return;
     if (OPEN.has(actor?.id) && ["system.tools", "system.attributes.prof", `flags.${ID}`].some(p => foundry.utils.hasProperty(changes ?? {}, p))) refresh(actor.id);
-    else if (foundry.utils.hasProperty(changes ?? {}, "system.attributes.hp")) refresh();
+    else if (foundry.utils.hasProperty(changes ?? {}, "system.attributes.hp")) refreshSoon();
   });
-  Hooks.on("targetToken", (/** @type {any} */ user) => { if (OPEN.size && user?.id === game.user?.id) refresh(); });
-  Hooks.on("controlToken", () => { if (OPEN.size) refresh(); });
+  Hooks.on("targetToken", (/** @type {any} */ user) => { if (OPEN.size && user?.id === game.user?.id) refreshSoon(); });
+  Hooks.on("controlToken", () => { if (OPEN.size) refreshSoon(); });
   Hooks.on("canvasReady", () => { if (OPEN.size) refresh(); });
 }
 

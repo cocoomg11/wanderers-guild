@@ -141,6 +141,18 @@ export function clampDays(v) {
   const n = Number(v);
   return Number.isFinite(n) ? Math.min(DAYS_MAX, Math.max(1, Math.round(n))) : 1;
 }
+/**
+ * The days the leader uses for a `gather` request. A GM's request: the requested days (clamped). A player's: the requested days, at
+ * most the last journey's length (`gatherReset.days`), and 1 when there is no journey on record (after a GM reset, or a journey
+ * without hours): a player can't raise the quantity by typing more days.
+ * @param {unknown} requested @param {{ isGM: boolean, journeyDays: number | null | undefined }} o
+ */
+export function allowedDays(requested, { isGM, journeyDays }) {
+  const want = clampDays(requested);
+  if (isGM) return want;
+  const j = Number(journeyDays);
+  return Number.isFinite(j) && j >= 1 ? Math.min(want, clampDays(j)) : 1;
+}
 /** A journey's length in days from its hours: max(1, ceil(hours / 24)), at most DAYS_MAX; null without usable hours. @param {unknown} hours */
 export function daysFromHours(hours) {
   const h = Number(hours);

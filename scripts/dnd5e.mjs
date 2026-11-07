@@ -157,3 +157,36 @@ export function creatureFacts(actor) {
   const dead = (Number.isFinite(hp) && hp <= 0) || !!actor?.statuses?.has?.("dead");
   return { name: String(actor?.name ?? ""), type: String(sys.details?.type?.value ?? ""), cr: Number.isFinite(cr) ? cr : null, dead, npc: actor?.type === "npc" };
 }
+
+/**
+ * Plain facts from a check's chat message for `verifyRoll` (roll-model.mjs). dnd5e 6.0.6: the message's `rolls[0]` is a D20Roll;
+ * Foundry's `Roll#dice` lists every die term (nested ones too) with `faces` and `results` ({ result, active }); a skill or tool
+ * check message (`type: "check"`) has `system.ability`, `system.skill`, `system.tool` (the roll dialog writes a changed ability
+ * there).
+ * @param {any} msg
+ * @returns {import("./roll-model.mjs").RollFacts | null}
+ */
+export function rollFacts(msg) {
+  const roll = msg?.rolls?.[0];
+  if (!roll) return null;
+  const dice = (Array.isArray(roll.dice) ? roll.dice : []).map((/** @type {any} */ d) => ({
+    faces: Number(d?.faces),
+    results: (Array.isArray(d?.results) ? d.results : []).map((/** @type {any} */ r) => ({ result: Number(r?.result), active: r?.active !== false }))
+  }));
+  const sys = msg.system ?? {};
+  const s = (/** @type {unknown} */ v) => (typeof v === "string" && v ? v : null);
+  return { total: Number(roll.total), dice, skill: s(sys.skill), tool: s(sys.tool), ability: s(sys.ability) };
+}
+
+/**
+ * The character's own bonus for a skill or tool check and its ability, from prepared data (dnd5e 6.0.6 `prepareSkill` /
+ * `prepareTools`: `total` = ability modifier + bonuses + condition reductions + a flat proficiency). Null bonus when unreadable.
+ * @param {any} actor @param {"skill" | "tool"} kind @param {string} key
+ * @returns {{ bonus: number | null, ability: string | null }}
+ */
+export function checkBonus(actor, kind, key) {
+  const e = kind === "tool" ? actor?.system?.tools?.[key] : actor?.system?.skills?.[key];
+  const t = Number(e?.total);
+  const ability = typeof e?.ability === "string" && e.ability ? e.ability : null;
+  return { bonus: e && Number.isFinite(t) ? t : null, ability };
+}

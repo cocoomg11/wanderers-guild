@@ -5,13 +5,16 @@
  * a harvested creature's mark (`flags.wanderers-guild.harvested` on its token), `rollUsed` on the roll message, the gather card
  * (`flags.wanderers-guild.gather`) and, after a journey, the world's reset record. The handler checks Foundry's sending user (owns
  * the actor, or is a GM), reads the roll from its chat message (author, our `gatherRoll` flag for this actor, profession and target,
- * age, not used before) and re-runs `assessGather()` from the same facts the window used. Untested in Node.
+ * age, not used before: the `rollUsed` flag and an in-memory list of used rolls), caps a player's days at the last journey's
+ * (`allowedDays`), re-runs `assessGather()` from the same facts the window used and checks a player's roll (one d20, the
+ * character's own bonus: roll-model.mjs `verifyRoll`). Untested in Node.
  */
 import { ID, TITLE, HOOKS, TOOLKIT_ID } from "./const.mjs";
 import { S, leader, log, warn } from "./core.mjs";
 import * as GM from "./gather-model.mjs";
 import * as Data from "./data.mjs";
 import * as D5 from "./dnd5e.mjs";
+import { verifyRoll, usedRolls } from "./roll-model.mjs";
 import { stackOf } from "./craft-model.mjs";
 import { gatherFacts, rollLabel } from "./gather-read.mjs";
 import { gatherCardHTML } from "./gather-view.mjs";
@@ -20,6 +23,8 @@ import { gatherCardHTML } from "./gather-view.mjs";
 export const JOURNEY_HOOK = "wayfarersToolkit.journey";
 
 const BUSY = new Set();
+/** Roll messages already used, kept on the leader for ROLL_MAX_AGE_MS (the message's `rollUsed` flag can be unset by its author). */
+const USED = usedRolls(GM.ROLL_MAX_AGE_MS);
 /** @type {Map<string, Promise<unknown>>} */
 const QUEUE = new Map();
 /** Runs gathers for one actor one after another. @template T @param {string} key @param {() => Promise<T>} fn @returns {Promise<T>} */
@@ -52,13 +57,24 @@ function readRoll(msg, user, actor, profession, target) {
   if (!msg) return { error: "The check's chat message is gone." };
   if ((msg.author?.id ?? msg.user?.id) !== user.id) return { error: "That roll isn't yours." };
   const f = msg.flags?.[ID] ?? {};
-  if (f.rollUsed) return { error: "That roll was already used." };
+  if (f.rollUsed || USED.has(msg.id)) return { error: "That roll was already used." };
   const g = f.gatherRoll;
   if (g?.actor !== actor.uuid || g?.profession !== profession || g?.target !== target) return { error: "That roll wasn't made for this." };
   if (Date.now() - Number(msg.timestamp ?? 0) > GM.ROLL_MAX_AGE_MS) return { error: "That roll is too old; roll again." };
   const total = Number(msg.rolls?.[0]?.total);
   if (!Number.isFinite(total)) return { error: "The roll has no total." };
   return { total, whisper: Array.isArray(msg.whisper) ? [...msg.whisper] : [] };
+}
+
+/**
+ * Whether the roll is the check `assessGather` expects, with the character's own bonus (roll-model.mjs `verifyRoll`).
+ * @param {any} msg @param {any} actor @param {{ kind: "skill" | "tool", key: string } | null} expected
+ * @returns {string | null} the reason it is refused, or null
+ */
+function checkRoll(msg, actor, expected) {
+  if (!expected || actor === null) return null; // assessGather refuses it with its own reason
+  const v = verifyRoll(D5.rollFacts(msg), { kind: expected.kind, key: expected.key, ...D5.checkBonus(actor, expected.kind, expected.key) });
+  return v.ok ? null : v.error;
 }
 
 /**
@@ -101,9 +117,15 @@ async function gatherNow(data, user) {
   const msg = game.messages.get(data.roll);
   const roll = readRoll(msg, user, actor, data.profession, targetKey(data));
   if ("error" in roll) return tell(user, actor, String(roll.error));
+  USED.add(msg.id);
   await msg.setFlag(ID, "rollUsed", true);
-  const f = gatherFacts(actor, data.profession, target, { isGM: !!user.isGM, days: GM.clampDays(data.days) });
+  // A player's days are capped by the last journey's (1 without one); a GM's are taken as sent.
+  const days = GM.allowedDays(data.days, { isGM: !!user.isGM, journeyDays: Data.journeyDays() });
+  const f = gatherFacts(actor, data.profession, target, { isGM: !!user.isGM, days });
   const a = GM.assessGather(f);
+  // A GM's roll is trusted (a GM can change anything anyway); a player's must be the check with the character's own bonus.
+  const bad = a.ok && !user.isGM ? checkRoll(msg, actor, a.roll) : null;
+  if (bad) return tell(user, actor, `Nothing was gathered: ${bad}`);
   const profName = f.profession?.name ?? data.profession;
   /** @type {import("./gather-view.mjs").GatherCard} */
   const card = { state: "error", actorName: actor.name, professionName: profName, kind: f.kind, where: a.where, rollText: rollLabel(a.roll), total: roll.total, dc: a.dc, tierName: a.tierName, rare: false, items: [], noItem: false, perDay: a.perDayMode ? a.perDay : null, days: a.perDayMode ? a.days : null };

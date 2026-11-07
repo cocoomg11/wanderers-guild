@@ -79,3 +79,25 @@ test("window classes never shadow ApplicationV2 instance properties with methods
     }
   }
 });
+
+test("tooltips never render document text as HTML", () => {
+  // Foundry's TooltipManager renders `data-tooltip` (and `data-tooltip-html`) as HTML after the browser decodes the attribute, so an
+  // escaped name there could still run script. Document text goes in `title` or `data-tooltip-text` (plain text) only.
+  for (const f of scripts) {
+    const s = read(`scripts/${f}`);
+    for (const m of s.matchAll(/data-tooltip(-html)?=("[^"]*"|'[^']*'|`[^`]*`)/g)) assert.ok(!m[2].includes("${"), `${f}: ${m[0]}`);
+    for (const m of s.matchAll(/dataset\.tooltip(Html)?\s*=\s*([^;\n]+)/g)) assert.ok(/^"[^"$`]*"$|^'[^'$`]*'$/.test(m[2].trim()), `${f}: ${m[0]}`);
+    assert.ok(!/setAttribute\(\s*["']data-tooltip(-html)?["']\s*,\s*(?!["'][^"']*["']\s*\))/.test(s), `${f}: setAttribute data-tooltip with a value that isn't a literal`);
+  }
+});
+
+test("leaders check rolls (used-roll list, d20 + own bonus) and cap a player's gather days", () => {
+  for (const f of ["scripts/craft-leader.mjs", "scripts/gather-leader.mjs"]) {
+    const s = read(f);
+    assert.ok(/usedRolls\(/.test(s) && /USED\.has\(msg\.id\)/.test(s) && /USED\.add\(msg\.id\)/.test(s), `${f}: used-roll list`);
+    assert.ok(/verifyRoll\(/.test(s), `${f}: verifyRoll`);
+  }
+  const gl = read("scripts/gather-leader.mjs");
+  assert.ok(/GM\.allowedDays\(data\.days/.test(gl), "gather days go through allowedDays");
+  assert.ok(!/days: GM\.clampDays\(data\.days\)/.test(gl), "no bare clamp of the requested days");
+});

@@ -13,6 +13,7 @@ A [Foundry VTT](https://foundryvtt.com) module (v13 and v14) for the dnd5e syste
 - [Settings](#settings)
 - [Public API and hooks](#public-api-and-hooks)
 - [Data Wanderer's Guild writes](#data-wanderers-guild-writes)
+- [Rolls and honesty](#rolls-and-honesty)
 - [Troubleshooting](#troubleshooting)
 - [Development](#development)
 - [License](#license)
@@ -124,6 +125,12 @@ With the Wanderer's Satchel installed, the module registers itself there (Open =
 
 Removing it: the setup window's **Data** page, or `api.cleanup` (a dry-run `plan()`, then `remove({ professions: true, ranks: true, recipes: true, rules: true, known: true, gathering: true, nodes: true, gathered: true, harvested: true, cards: true, settings: true }, "REMOVE")`). Crafted and gathered items stay: they are ordinary items.
 
+## Rolls and honesty
+
+Crafting and gathering checks are rolled on the player's client with dnd5e's own roll; only the roll's chat message id is sent to the active GM's client, which does every write. That client checks the message before using it: the sender wrote it, it was made for this character and this craft or gather, it is at most 10 minutes old, it wasn't used before (a mark on the message and a list kept in the GM client's memory, so unsetting the mark doesn't replay a roll), and, for a player's roll, it is exactly one d20 with one result from 1 to 20 and the total minus that result is the character's own skill or tool bonus as the GM's client works it out from the character sheet. A situational bonus typed in the roll dialog, proficiency dice or another ability can't be checked that way, so such a roll is refused with the reason (for crafting with *GM approves each craft* on, it goes to the GM's card with the reason instead). A player's *Days in this stage* is capped at the last journey's days (1 without one).
+
+What stays on the honor system: the d20's face. A player's browser makes the roll, so a determined player can still write any result from 1 to 20 into their own message. Advantage and disadvantage aren't checked either (the kept die counts). If that matters at your table, turn on *GM approves each craft*, and roll gathering checks in view of the table. A GM's own rolls and days are taken as sent.
+
 ## Troubleshooting
 
 - **A character shows no professions.** It needs proficiency (not half proficiency) with one of a profession's linked tools; check the character's Tools on the dnd5e sheet and the links on the setup window's Professions page.
@@ -133,6 +140,7 @@ Removing it: the setup window's **Data** page, or `api.cleanup` (a dry-run `plan
 - **Every craft waits for the GM.** *GM approves each craft* is on (setup › Settings); turn it off to resolve crafts on the roll.
 - **The time says "not set".** Fill in the time rules on the Crafting rules page (or the recipe's own time). The time is only shown; the calendar never moves.
 - **Gather is greyed out.** The line under the option says why: too far from the node (Reach), already gathered here, the node is used up, the creature isn't defeated or was harvested, or no GM is connected.
+- **"The roll's bonus isn't the character's".** The roll had a situational bonus (or the sheet changed since): roll again without one. Proficiency dice and a changed ability are refused the same way.
 - **Players don't see nodes.** Map notes must be shown in their browser (Journal Notes controls › Toggle notes), and the node must not be hidden.
 - **Something else.** Run the setup window's **Health** page and look for warnings.
 

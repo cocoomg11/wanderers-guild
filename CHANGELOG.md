@@ -2,6 +2,32 @@
 
 All notable changes to Wanderer's Guild. Versions follow the `version` in `module.json`.
 
+## 0.3.2 (2026-11-07)
+
+Security and speed fixes from a code audit. No data changes.
+
+### Fixed
+
+- **A player could choose the gather quantity.** The `gather` request's *Days in this stage* (1–30) was only clamped. The GM's client now takes a GM's days as sent, but caps a player's at the last journey's days (from the reset record), and uses 1 when there is no journey on record (`allowedDays` in gather-model.mjs). The Gather window shows a player the same cap ("at most 3 (the last journey)", "1 (no journey yet)").
+- **A used roll could be replayed.** `rollUsed` is a mark on the roll's chat message, which its author can unset. The GM's client now also keeps the used roll message ids in memory for the roll age (10 minutes; older rolls are refused anyway), for crafting and gathering (`usedRolls` in the new roll-model.mjs). The mark stays.
+- **A roll's total could be forged.** For a player's roll the GM's client now checks the message's first roll: exactly one die, a d20 with one kept result from 1 to 20, the same skill or tool (and ability) the check needs, and total − the d20's result equal to the character's own bonus read from the sheet's prepared data (dnd5e 6.0.6 `system.skills[key].total` / `system.tools[key].total`). A situational bonus typed in the roll dialog, proficiency dice or another ability can't be checked, so such a roll is refused with the reason; for crafting with *GM approves each craft* on, it goes to the GM's card with the reason instead (`verifyRoll`). A GM's rolls are taken as sent. The d20's face itself stays on the honor system: README *Rolls and honesty*.
+- **Gather windows redrew too often.** Any HP change, token control or targeting redrew every open Gather window at once; those now wait 100 ms (`foundry.utils.debounce`, so a burst is one redraw) and bail at once when no Gather window is open.
+- Tooltips: checked every tooltip for document text (Foundry's tooltips render `data-tooltip` as HTML after the attribute is decoded). The module sets no `data-tooltip` with document text (its tooltips are plain `title` attributes, which the browser shows as text); a repo test now keeps it that way (`data-tooltip` / `data-tooltip-html` only with fixed text; document text goes in `title` or `data-tooltip-text`).
+
+### Untested in Foundry
+
+Check on Foundry 14.370 with dnd5e 6.0.6, as a player (not only as GM):
+
+- [ ] Gather as a player after a toolkit journey of e.g. 50 hours: the window starts at 3 and says "at most 3 (the last journey)"; typing 10 stays at 3; the card says "× 3 days". After a GM reset: 1 day ("1 (no journey yet)"). As GM: any 1–30 is used.
+- [ ] Crafting and gathering a normal roll (no situational bonus), with advantage and with disadvantage: accepted, card as before. A tool with Expertise, a skill with a flat bonus from an effect, an exhausted character (condition reduction): accepted (the sheet's total matches the roll).
+- [ ] A situational bonus typed in the roll dialog (e.g. +2): refused with "A situational bonus can't be checked"; with *GM approves each craft* on, a craft goes to the GM's card with "Roll not checked: …" and the GM can approve or refuse.
+- [ ] Changing the ability in the roll dialog: refused with "rolled with a different ability".
+- [ ] Rules "proficiency dice" variant on: refused with "more than one die" (known limit).
+- [ ] Replay: as a player, gather, then in the console unset the roll's `rollUsed` flag (`game.messages.get(id).unsetFlag("wanderers-guild", "rollUsed")`) and send the same `gather` request again: refused "That roll was already used". Same for a craft.
+- [ ] Forged total: edit a gather roll message's roll total (console) and send it: refused with the bonus reason.
+- [ ] Gather window open during a fight: HP changes and target / control changes still redraw the window (within a moment), with no lag; with no Gather window open, nothing redraws.
+- [ ] GM rolls (crafting and gathering from a GM client) work as before, situational bonus included.
+
 ## 0.3.1 (2026-11-07)
 
 ### Fixed
