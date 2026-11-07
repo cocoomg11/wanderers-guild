@@ -8,7 +8,7 @@
  * The tool check is rolled on the crafter's client (dnd5e `rollToolCheck`); the request names the roll's chat message and the leader
  * reads the total from that message (author = the sender, our flag names this actor and recipe, at most ROLL_MAX_AGE_MS old, not used
  * before, by its flag and by the leader's in-memory list; then it is marked used; a player's roll must also be one d20 plus the
- * character's own tool bonus, roll-model.mjs `verifyRoll`) and resolves the craft at once: the materials are taken from the inventory (on a failure too,
+ * character's own dice and flat tool bonus, roll-model.mjs `verifyRoll`) and resolves the craft at once: the materials are taken from the inventory (on a failure too,
  * unless the rules keep them), and on a success the item is made. A craft with no DC set anywhere succeeds on the roll. Nothing waits
  * for a GM unless *GM approves each craft* is on. If the materials (or the coin) are gone by then, the craft is refused and nothing is
  * used. Crafts for one character are handled one after another, so two rolls can't spend the same stack. The d20's face itself can

@@ -81,7 +81,7 @@ Crafts for one character are handled one at a time, so two quick rolls can't spe
 
 **GM approves each craft** (switch, off by default): after the roll a card asks the GM to *Approve* or *Refuse* (*Success*, *Failure* or *Refuse* when no DC is set); nothing is made or used up until then, and everything is checked again at that moment. With it off, nothing ever waits for a GM's click.
 
-A GM must be connected to craft and learn (their client does the writing). A player's tool check must be one d20 plus the character's own tool bonus as the sheet works it out; a roll with a situational bonus, extra dice or another ability is refused with the reason (with *GM approves each craft* on, it goes to the GM's card with the reason instead). The d20's face itself can't be checked: see *Rolls and honesty* in the README, and turn on GM approval if that matters at your table.
+A GM must be connected to craft and learn (their client does the writing). A player's tool check must be one d20 plus the character's own tool bonus as dnd5e works it out, including dice bonuses from effects on the character (e.g. 1d4); a roll with a situational bonus, dice typed in the roll dialog or another ability is refused with the reason (with *GM approves each craft* on, it goes to the GM's card with the reason instead). The d20's face itself can't be checked: see *Rolls and honesty* in the README, and turn on GM approval if that matters at your table.
 
 ## What it writes
 

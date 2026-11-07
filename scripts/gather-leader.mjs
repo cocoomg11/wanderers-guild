@@ -7,7 +7,7 @@
  * the actor, or is a GM), reads the roll from its chat message (author, our `gatherRoll` flag for this actor, profession and target,
  * age, not used before: the `rollUsed` flag and an in-memory list of used rolls), caps a player's days at the last journey's
  * (`allowedDays`), re-runs `assessGather()` from the same facts the window used and checks a player's roll (one d20, the
- * character's own bonus: roll-model.mjs `verifyRoll`). Untested in Node.
+ * character's own dice bonuses and flat bonus: roll-model.mjs `verifyRoll`). Untested in Node.
  */
 import { ID, TITLE, HOOKS, TOOLKIT_ID } from "./const.mjs";
 import { S, leader, log, warn } from "./core.mjs";

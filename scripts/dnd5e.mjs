@@ -8,6 +8,7 @@
  * `system.attributes.prof` is the proficiency bonus; `system.details.level` the character level.
  */
 import { SYSTEM_ID } from "./const.mjs";
+import { splitBonus } from "./roll-model.mjs";
 
 const loc = (/** @type {unknown} */ s) => { const t = String(s ?? ""); try { return game.i18n?.localize?.(t) ?? t; } catch { return t; } };
 const D = () => /** @type {any} */ (globalThis).CONFIG?.DND5E ?? {};
@@ -159,10 +160,10 @@ export function creatureFacts(actor) {
 }
 
 /**
- * Plain facts from a check's chat message for `verifyRoll` (roll-model.mjs). dnd5e 6.0.6: the message's `rolls[0]` is a D20Roll;
- * Foundry's `Roll#dice` lists every die term (nested ones too) with `faces` and `results` ({ result, active }); a skill or tool
- * check message (`type: "check"`) has `system.ability`, `system.skill`, `system.tool` (the roll dialog writes a changed ability
- * there).
+ * Plain facts from a check's chat message for `verifyRoll` (roll-model.mjs). dnd5e 6.0.6: the message's `rolls[0]` is a D20Roll
+ * whose first term is the d20; Foundry's `Roll#dice` lists every die term (nested ones in brackets too) with `number`, `faces`
+ * and `results` ({ result, active }); a skill or tool check message (`type: "check"`) has `system.ability`, `system.skill`,
+ * `system.tool` (the roll dialog writes a changed ability there).
  * @param {any} msg
  * @returns {import("./roll-model.mjs").RollFacts | null}
  */
@@ -170,6 +171,7 @@ export function rollFacts(msg) {
   const roll = msg?.rolls?.[0];
   if (!roll) return null;
   const dice = (Array.isArray(roll.dice) ? roll.dice : []).map((/** @type {any} */ d) => ({
+    number: Number(d?.number),
     faces: Number(d?.faces),
     results: (Array.isArray(d?.results) ? d.results : []).map((/** @type {any} */ r) => ({ result: Number(r?.result), active: r?.active !== false }))
   }));
@@ -178,15 +180,58 @@ export function rollFacts(msg) {
   return { total: Number(roll.total), dice, skill: s(sys.skill), tool: s(sys.tool), ability: s(sys.ability) };
 }
 
+/** A deterministic part of a bonus formula as a number (like dnd5e's `simplifyBonus`), else null. @param {string} part */
+function flatOf(part) {
+  try {
+    const R = /** @type {any} */ (globalThis).Roll;
+    const roll = new R(part);
+    return roll.isDeterministic ? Number(roll.evaluateSync().total) : null;
+  } catch { return null; }
+}
+
 /**
- * The character's own bonus for a skill or tool check and its ability, from prepared data (dnd5e 6.0.6 `prepareSkill` /
- * `prepareTools`: `total` = ability modifier + bonuses + condition reductions + a flat proficiency). Null bonus when unreadable.
+ * The character's own bonus for a skill or tool check, worked out on the leader the way dnd5e 6.0.6's `Actor5e#_buildSkillToolConfig`
+ * builds the roll (default ability, no dialog changes): `@mod` (the ability's `mod`), `@prof` (`CommonTemplate
+ * .calculateSkillToolProficiency(actor, ability, { skill | tool })`, its `term` when `hasProficiency`), `@ruleBonus` (
+ * `D20RollModificationField.combineFields(actor.system, ["abilities.<a>.check.roll", "rolls.ability.check",
+ * "rolls.ability.<skill|tool>", "<skills|tools>.<key>.roll"], { rules: { category: "check", actor, rollData } }).bonus`: the
+ * `roll.bonus` fields effects write (dnd5e's shim maps the old `system.skills.<s>.bonuses.check` keys of e.g. Guidance and
+ * `system.bonuses.abilities.check` / `.skill` there) plus the check / d20 bonus rules) and the condition reductions
+ * (`conditionRollReductions`). The bonus formula is resolved with `replaceFormulaData` against the actor's roll data with `roll`
+ * set as dnd5e sets it, then split into a flat part and dice terms (`splitBonus`). Proficiency dice and a formula that isn't plain
+ * dice and numbers give `problem`. Falls back to the prepared `total` (no dice) when those dnd5e parts are missing.
  * @param {any} actor @param {"skill" | "tool"} kind @param {string} key
- * @returns {{ bonus: number | null, ability: string | null }}
+ * @returns {{ bonus: number | null, ability: string | null, dice: import("./roll-model.mjs").BonusDie[], problem: string | null }}
  */
 export function checkBonus(actor, kind, key) {
   const e = kind === "tool" ? actor?.system?.tools?.[key] : actor?.system?.skills?.[key];
-  const t = Number(e?.total);
   const ability = typeof e?.ability === "string" && e.ability ? e.ability : null;
-  return { bonus: e && Number.isFinite(t) ? t : null, ability };
+  const t = Number(e?.total);
+  const fallback = { bonus: e && Number.isFinite(t) ? t : null, ability, dice: [], problem: null };
+  if (!e || !ability) return fallback;
+  const sys5e = /** @type {any} */ (globalThis).dnd5e;
+  const Mod = sys5e?.dataModels?.shared?.D20RollModificationField;
+  const Common = sys5e?.dataModels?.actor?.CommonTemplate;
+  if (typeof Mod?.combineFields !== "function" || typeof Common?.calculateSkillToolProficiency !== "function") return fallback;
+  try {
+    const prof = Common.calculateSkillToolProficiency(actor, ability, { [kind]: key });
+    let flat = Number(actor.system.abilities?.[ability]?.mod ?? 0) || 0;
+    if (prof?.hasProficiency) {
+      const term = String(prof.term ?? "");
+      if (!/^-?\d+$/.test(term.trim())) return { ...fallback, problem: "The character uses proficiency dice, which can't be checked." };
+      flat += Number(term);
+    }
+    const rollData = actor.getRollData({ roll: true });
+    rollData.roll = { ability, proficient: (prof?.multiplier ?? 0) >= 1, [kind]: key, type: kind };
+    const { bonus } = Mod.combineFields(actor.system, [
+      `abilities.${ability}.check.roll`, "rolls.ability.check", `rolls.ability.${kind}`, `${kind}s.${key}.roll`
+    ], { rules: { category: "check", actor, rollData } });
+    const R = /** @type {any} */ (globalThis).CONFIG?.Dice?.BasicRoll ?? /** @type {any} */ (globalThis).Roll;
+    const formula = bonus ? String(R.replaceFormulaData(String(bonus), rollData)) : "";
+    const split = splitBonus(formula, flatOf);
+    if (!split.ok) return { ...fallback, problem: `The character's check bonus (${split.part}) isn't plain dice and numbers, so it can't be checked.` };
+    flat += split.flat;
+    for (const r of Object.values(actor.conditionRollReductions ?? {})) flat += Number(r) || 0;
+    return { bonus: flat, ability, dice: split.dice, problem: null };
+  } catch { return fallback; }
 }

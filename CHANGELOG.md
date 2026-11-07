@@ -2,6 +2,27 @@
 
 All notable changes to Wanderer's Guild. Versions follow the `version` in `module.json`.
 
+## 0.3.3 (2026-11-07)
+
+### Fixed
+
+- **A player's roll with an effect's dice bonus was refused** ("more than one die"), e.g. a 1d4 from Guidance or a similar effect. The GM's client now works out the character's check bonus the way dnd5e 6.0.6 builds the roll (`_buildSkillToolConfig`): ability modifier, flat proficiency, the `roll.bonus` fields of `abilities.<ability>.check`, `rolls.ability.check`, `rolls.ability.<skill|tool>` and `<skills|tools>.<key>` with dnd5e's check rules, and condition reductions, resolved against the character's roll data and split into a flat part and dice terms. A roll is accepted when it has one d20 (one kept result 1–20), every other die matches one of those dice bonuses (same count and faces, every result within range), every bonus die is there, and the total minus the d20 and the bonus dice equals the flat part. A die or a situational bonus typed in the roll dialog is still refused, and so are proficiency dice and a changed ability. A bonus formula that isn't plain dice and numbers (dice inside a function, a multiplied die) is refused with the reason.
+- The check bonus is no longer read from the sheet's prepared `total`, which dnd5e computes without non-deterministic bonuses (a "2 + 1d4" bonus counted as 0); `total` stays the fallback when dnd5e's parts can't be read.
+
+### Untested in Foundry
+
+Check on Foundry 14.370 with dnd5e 6.0.6, as a player:
+
+- [ ] Guidance (cast on the gatherer for the gathering skill) then Gather: accepted; card total = d20 + 1d4 + bonus.
+- [ ] An effect adding `1d4` to `system.rolls.ability.check.bonus` (all checks, Bless-like), then a craft (tool check): accepted. Same with the bonus on `system.tools.<tool>.roll.bonus`.
+- [ ] Two dice bonuses at once (e.g. 1d4 and 1d6 effects): accepted.
+- [ ] An effect with a flat and a dice part (`2 + 1d4`): accepted, and the flat 2 counts.
+- [ ] A die typed in the roll dialog's situational bonus (`1d6`): refused ("isn't one of the character's bonuses").
+- [ ] Edit a message's bonus die result to 9 on a d4 (console) and send it: refused ("result isn't valid").
+- [ ] Removing the effect after the roll but before the GM's client handles it (rare): refused, roll again.
+- [ ] The old cases still pass: plain roll, advantage / disadvantage, Expertise, exhaustion, flat effect bonus; GM rolls as before.
+- [ ] Proficiency dice variant on: refused with "proficiency dice".
+
 ## 0.3.2 (2026-11-07)
 
 Security and speed fixes from a code audit. No data changes.
