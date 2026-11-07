@@ -2,7 +2,7 @@
 
 All notable changes to Wanderer's Guild. Versions follow the `version` in `module.json`.
 
-## 0.3.0 (unreleased)
+## 0.3.0 (2026-11-06)
 
 Third slice: gathering, plus a Professions page on Wanderer's Toolkit's character sheet.
 
@@ -41,7 +41,7 @@ Not run in a live world yet; check on Foundry 14.370 with dnd5e 6.0.6 (and once 
 - [ ] Setup › Data: the dry run counts gathering rules and scene tiers, nodes, characters' limits, harvested tokens, gather cards; REMOVE deletes nodes and cards, clears the flags, leaves gathered items.
 - [ ] `api.gathering.open(actor)`, `.nodes()`, `.assess(actor, "herbalism", { scene: canvas.scene })`, `.place()` (GM); hook `wanderers-guild.gathered` fires once per resolved gather on the GM client.
 
-## 0.2.0 (unreleased)
+## 0.2.0 (not released separately; included in 0.3.0)
 
 Second slice: recipes and crafting. Gathering is still a placeholder.
 
@@ -83,7 +83,7 @@ Not run in a live world yet; check on Foundry 14.370 with dnd5e 6.0.6 (and once 
 - [ ] Setup › Data: the dry run counts recipes, rules, characters with known recipes, and cards/rolls; REMOVE deletes the cards and notices, keeps the roll messages (mark removed), clears the flags.
 - [ ] `api.crafting.open(actor, "smithing")`, `.assess(actor, id)`, `.learn(actor, id)`; the `wanderers-guild.crafted` hook fires once per decided craft on the GM client.
 
-## 0.1.0 (unreleased)
+## 0.1.0 (not released separately; included in 0.3.0)
 
 First slice: professions and ranks. Crafting, recipes and gathering are placeholders (their buttons say "Coming in a later version").
 
