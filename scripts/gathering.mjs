@@ -61,7 +61,7 @@ export class GatherApp extends Base {
   get days() { return GM.clampDays(this.daysTyped ?? Data.journeyDays() ?? 1); }
 
   /** The options shown: [{ option, target }]. */
-  options() {
+  targets() {
     const scene = canvas?.scene; const isGM = !!game.user?.isGM;
     /** @type {Array<{ key: string, target: any }>} */ const list = [];
     if (scene) {
@@ -84,7 +84,7 @@ export class GatherApp extends Base {
     const isGM = !!game.user?.isGM;
     const days = this.days;
     const perDay = Data.gatherRules().qtyMode !== "flat";
-    const options = this.options().map(({ key, target }) => {
+    const options = this.targets().map(({ key, target }) => {
       const f = gatherFacts(this.actor, this.professionId, target, { isGM, days });
       const a = GM.assessGather(f);
       return { key, kind: f.kind, title: a.where, dcText: a.dcText, rollText: rollLabel(a.roll), gives: givesText(a, a.rareMargin), problems: a.problems, ok: a.ok };
@@ -126,7 +126,7 @@ export class GatherApp extends Base {
   /** Rolls the check here, then asks the active GM's client to give the items. @param {string} key */
   async #gather(key) {
     if (this.busy) return;
-    const opt = this.options().find(o => o.key === key); if (!opt) return;
+    const opt = this.targets().find(o => o.key === key); if (!opt) return;
     const f = gatherFacts(this.actor, this.professionId, opt.target, { isGM: !!game.user?.isGM, days: this.days });
     const a = GM.assessGather(f);
     if (!a.ok || !a.roll) { ui.notifications.warn(`${TITLE}: ${a.problems[0] ?? "can't gather here now."}`); return; }

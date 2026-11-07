@@ -69,3 +69,13 @@ test("public text names no publisher, setting or rulebook", () => {
   const banned = /warcraft|blizzard|azeroth|player'?s handbook|dungeon master'?s guide|\bPHB\b|\bDMG\b|5etools/i;
   for (const f of files) assert.ok(!banned.test(read(f)), f);
 });
+
+test("window classes never shadow ApplicationV2 instance properties with methods", () => {
+  const RESERVED = ["options", "position", "element", "state", "window", "id", "title", "tabGroups", "rendered", "minimized", "hasFrame", "classList"];
+  for (const f of scripts) {
+    const src = read(`scripts/${f}`);
+    for (const name of RESERVED) {
+      assert.ok(!new RegExp(`^\\s{2}(?:async\\s+)?${name}\\s*\\(`, "m").test(src), `${f} defines ${name}() on a class`);
+    }
+  }
+});

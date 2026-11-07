@@ -2,6 +2,22 @@
 
 All notable changes to Wanderer's Guild. Versions follow the `version` in `module.json`.
 
+## 0.3.1 (2026-11-07)
+
+### Fixed
+
+- The Gather window couldn't be drawn ("this.options is not a function"): one of its methods shadowed the window's own `options`. Renamed; a repo test now stops window classes from defining methods with Foundry's window property names.
+
+### Checked live (Foundry 14.370, dnd5e 6.0.6, toolkit 2.3.0)
+
+- Starter set, Professions window, toolkit sheet page (bookmark, Craft button), setup window, health report.
+- A craft: Herbalism Kit check 16 vs DC 10 made the item, used up 2 of 3 materials and posted the card; with 1 left the window shows "missing" and Craft is disabled.
+- Placing a gathering node (Journal Notes controls › Gathering node, item by UUID), the scene's Table Tools tier field.
+
+### Untested in Foundry
+
+- [ ] Everything in 0.3.0's list that needs the Gather window: gathering at a node and in an area, rare results, days per stage, harvesting a creature, limits and resets.
+
 ## 0.3.0 (2026-11-06)
 
 Third slice: gathering, plus a Professions page on Wanderer's Toolkit's character sheet.
