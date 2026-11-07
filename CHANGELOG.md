@@ -7,6 +7,7 @@ All notable changes to Wanderer's Guild. Versions follow the `version` in `modul
 ### Fixed
 
 - The Gather window couldn't be drawn ("this.options is not a function"): one of its methods shadowed the window's own `options`. Renamed; a repo test now stops window classes from defining methods with Foundry's window property names.
+- Gathered and crafted consumables and loot now join the character's stack of the same item. A world item copied onto a character keeps no link back to its source, so every result made a new stack; the stack is now found by source, else by the same type and name (`stackOf` in craft-model.mjs, used by both).
 
 ### Checked live (Foundry 14.370, dnd5e 6.0.6, toolkit 2.3.0)
 
