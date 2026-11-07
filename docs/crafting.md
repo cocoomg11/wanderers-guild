@@ -16,7 +16,7 @@ The module ships **no rulebook figures**. Every number crafting uses is world da
 | Field | What it does |
 | --- | --- |
 | Time from the item's price | *N* hours of work per *M* gp of the item's price, rounded not at all, up to a whole hour, or up to a working day. |
-| A working day | Hours in a working day: the time text adds "(2 days of 8 hours)", and day rounding uses it. |
+| A working day | Hours in a working day: the time text adds "(2 days of 6 hours)", and day rounding uses it. |
 | Coin cost from the item's price | A percentage of the item's price, and whether it is **taken from the crafter's coin**. |
 | Magic items by rarity | Hours, cost (gp) and DC for each rarity. Used for items with a rarity, field by field, instead of the price rules. |
 | Consumables | A percentage of the rarity table's time and cost for consumable items (100 % = no change). |

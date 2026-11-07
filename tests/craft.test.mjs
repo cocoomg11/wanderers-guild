@@ -125,5 +125,5 @@ test("rank helpers, tools, spending, decisions, time text", () => {
   assert.deepEqual(C.decide({ dc: 10, total: 3 }, "refuse"), { refuse: true });
   assert.equal(C.decide({ dc: 10, total: 3 }, "bogus"), null);
   assert.equal(C.hoursText(0.5), "30 minutes"); assert.equal(C.hoursText(1), "1 hour");
-  assert.equal(C.hoursText(12, 8), "12 hours (1.5 days of 8 hours)"); assert.equal(C.hoursText(null), "");
+  assert.equal(C.hoursText(9, 6), "9 hours (1.5 days of 6 hours)"); assert.equal(C.hoursText(null), "");
 });

@@ -196,7 +196,7 @@ export function payPlan(currency, amount, values) {
 // ------------------------------------------------------------------ time
 
 /**
- * Hours as text: "45 minutes", "4 hours", "36 hours (4.5 days of 8 hours)".
+ * Hours as text: "45 minutes", "4 hours", "27 hours (4.5 days of 6 hours)".
  * @param {number | null} h @param {number | null} [perDay]
  */
 export function hoursText(h, perDay = null) {
