@@ -7,7 +7,7 @@ How crafting works in Wanderer's Guild 0.2, and what the GM sets up. Crafting is
 1. The GM fills in the **Crafting rules** (setup window › Crafting rules) from the rules their table uses. Nothing is filled in for you.
 2. The GM writes **recipes** (setup window › Recipes): what each one makes, which profession makes it, what it uses.
 3. Characters **learn** recipes (or a recipe is known by everyone with its profession).
-4. On the Professions window a crafting profession's **Craft** button opens the Crafting window. Pick a recipe, press **Craft**: the character rolls the profession's tool check, and the active GM's client makes the item and uses up the materials.
+4. On the Professions window a crafting profession's **Craft** button opens the Crafting window. Pick a recipe, press **Craft**: the character rolls the profession's tool check, and the active GM's client takes the materials from the character's inventory and, on a success, makes the item. Nothing waits for a GM.
 
 ## Crafting rules: your numbers
 
@@ -21,11 +21,11 @@ The module ships **no rulebook figures**. Every number crafting uses is world da
 | Magic items by rarity | Hours, cost (gp) and DC for each rarity. Used for items with a rarity, field by field, instead of the price rules. |
 | Consumables | A percentage of the rarity table's time and cost for consumable items (100 % = no change). |
 | Base DC | The DC when neither the recipe nor its rarity row sets one. |
-| On a failed check | Materials (and any coin cost) are **kept**, or **used up**. |
+| On a failed check | Materials (and any coin cost) are **used up** (the default: consumed on use), or **kept**. |
 | Helpers | How many helpers a crafter may name, and whether each helper divides the time. |
 | Time by rank | A percentage of the time for crafters at each rank (for a rank perk that speeds crafting). |
 
-A recipe's own DC, time and cost win over this page. Leave a field empty and the Crafting window says "not set". If no DC is set anywhere, every craft waits for a GM to decide.
+A recipe's own DC, time and cost win over this page. Leave a field empty and the Crafting window says "not set". If no DC is set anywhere, the craft succeeds on the roll (the roll is still made and shown; the card says "no DC set: crafted").
 
 **Import / export JSON**: the box under the page holds the rules as JSON. Download them to keep, paste a set (yours, or one from another world) and press *Import from the box* to replace the page.
 
@@ -46,7 +46,7 @@ A recipe (setup window › Recipes › Add recipe) has:
 - **Rarity**: the item's own, a different one, or "mundane". The rarity decides which rank can craft it (the rank table's *Crafts up to*) and which rarity row of the rules it uses.
 - **DC, Time (hours), Coin cost (gp)**: empty = the rules page.
 - **Known by everyone with the profession**: no need to learn it.
-- **Materials**: drop items onto the list, or type a name, with a quantity each. A carried item counts when it came from that item (the same source), or has the same name. They are used up by a craft.
+- **Materials**: drop items onto the list, or type a name, with a quantity each. They always come from the crafting character's inventory: a carried item counts when it came from that item (the same source), or has the same name (case and extra spaces don't matter), so a typed name-only material matches any carried item of that name. They are used up by a craft.
 - **Note for players**.
 
 Players can read every recipe (their windows need them), so keep secrets out of the notes. At most 300 recipes per world, 12 materials per recipe. The Import / export box works as for the rules: a pasted recipe with the same id replaces the old one, new ids are added.
@@ -64,19 +64,24 @@ Known recipes are kept on the character (at most 200; recipes known by everyone 
 
 The **Craft** page lists the profession's recipes, coloured by rarity: *can craft*, *missing something*, *needs a higher rank*, *recipe unknown*. Search and *Can craft* narrow the list. The selected recipe shows:
 
-- **Materials**: have / need.
+- **Materials**: have / need, counted in the character's inventory.
 - **Requirements**: the tool (the profession's linked tool the character is proficient with; expertise wins), the rank needed, the check (the tool and its bonus, and the DC), and the time.
 - **Cost**: the item's value, the coin cost (and whether it is paid from the character's coin), what a failure does.
+- Next to the **Craft** button (and as its tooltip), what the craft will use up, for example *Crafting uses up: 2× Copper Bar, 1× Weak Flux (taken when you roll, success or failure)*, or *…on success; kept on a failure* when the rules keep materials on a failure. There is no confirm step: pressing Craft is the go-ahead.
 
-**Craft** rolls the tool check (dnd5e's own roll dialog, with the DC as the target). The roll's chat message goes to the active GM's client, which checks everything again (the roll is this character's, for this recipe, recent and not used before; the recipe is known; the rank allows it; the materials and coin are there) and then:
+**Craft** rolls the tool check (dnd5e's own roll dialog, with the DC as the target). When the roll lands, its chat message goes to the active GM's client, which checks everything again (the roll is this character's, for this recipe, recent and not used before; the character is owned by the player; the recipe is known; the rank allows it; the materials and coin are in the inventory now) and resolves the craft at once:
 
 - **Success**: the item is added (or a matching stack of a consumable or loot item grows), the materials are used up, the coin cost is paid when the rules say so.
-- **Failure**: the materials and coin are kept or used up, as the rules say.
-- A **chat card** shows the result, the roll against the DC, the time, what was used.
+- **Failure**: the materials (and the coin cost) are used up too, unless the rules say failures keep them.
+- **No DC set** anywhere: the craft succeeds on the roll.
+- **Materials gone** by then (traded, used, dropped): the craft is refused, nothing is made or used up.
+- A **chat card** shows the result, the roll against the DC, the time, and what was used up.
 
-**GM approves each craft** (switch, off by default): after the roll a card asks the GM to *Approve* or *Refuse*; nothing is made or used up until then, and everything is checked again at that moment. A craft with no DC always asks the GM, with *Success*, *Failure* and *Refuse*.
+Crafts for one character are handled one at a time, so two quick rolls can't spend the same stack twice.
 
-A GM must be connected to craft and learn. A roll can't be checked for honesty (as with any Foundry roll a player makes); turn on GM approval if that matters at your table.
+**GM approves each craft** (switch, off by default): after the roll a card asks the GM to *Approve* or *Refuse* (*Success*, *Failure* or *Refuse* when no DC is set); nothing is made or used up until then, and everything is checked again at that moment. With it off, nothing ever waits for a GM's click.
+
+A GM must be connected to craft and learn (their client does the writing). A roll can't be checked for honesty (as with any Foundry roll a player makes); turn on GM approval if that matters at your table.
 
 ## What it writes
 

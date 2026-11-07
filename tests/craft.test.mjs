@@ -17,7 +17,7 @@ const base = { recipe: blade, profession: smith, rules, ranks: defaultRanks(), f
 test("default rules: nothing set, neutral", () => {
   const d = C.normalizeRules(undefined);
   assert.deepEqual([d.timeHours, d.timePerGp, d.materialPct, d.dc, d.hoursPerDay], [null, null, null, null, null]);
-  assert.deepEqual([d.consumablePct, d.helpersMax, d.helperDivides, d.failMaterials, d.chargeCoin], [100, 0, false, "keep", false]);
+  assert.deepEqual([d.consumablePct, d.helpersMax, d.helperDivides, d.failMaterials, d.chargeCoin], [100, 0, false, "lose", false], "a failure uses the materials up by default");
   assert.ok(Object.values(d.byRarity).every(r => r.hours === null && r.cost === null && r.dc === null));
   assert.deepEqual(C.rulesStatus(d).set, []);
   assert.equal(C.rulesStatus(rules).unset.length, 0);
@@ -25,7 +25,8 @@ test("default rules: nothing set, neutral", () => {
 
 test("normalizeRules clamps and drops junk", () => {
   const r = C.normalizeRules({ v: 1, dc: 99, materialPct: -3, rounding: "weird", failMaterials: "x", helpersMax: 99, rankTime: { 3: 100, 4: "abc", 99: 50, 5: 80 }, byRarity: { rare: { dc: "12.6" }, nope: { dc: 3 } }, timePerGp: 0 });
-  assert.equal(r.dc, 40); assert.equal(r.materialPct, 0); assert.equal(r.rounding, "hour"); assert.equal(r.failMaterials, "keep");
+  assert.equal(r.dc, 40); assert.equal(r.materialPct, 0); assert.equal(r.rounding, "hour"); assert.equal(r.failMaterials, "lose");
+  assert.equal(C.normalizeRules({ v: 1, failMaterials: "keep" }).failMaterials, "keep", "the GM's option stays");
   assert.equal(r.helpersMax, C.HELPERS_MAX); assert.deepEqual(r.rankTime, { 5: 80 }); assert.equal(r.byRarity.rare.dc, 13);
   assert.ok(!("nope" in r.byRarity)); assert.equal(r.timePerGp, null);
 });
@@ -108,7 +109,7 @@ test("assess: time modifiers, rounding, consumables, overrides, no DC", () => {
   assert.deepEqual([own.hours, own.cost, own.dc], [2, 200, 8]);
   const bare = C.assess({ ...base, rules: C.normalizeRules(undefined) });
   assert.deepEqual([bare.hours, bare.cost, bare.dc], [null, null, null]);
-  assert.equal(C.outcome(12, null), null); assert.equal(C.outcome(11, 11), true); assert.equal(C.outcome(10, 11), false);
+  assert.equal(C.outcome(12, null), true, "no DC set: the roll crafts it"); assert.equal(C.outcome(1, null), true); assert.equal(C.outcome(11, 11), true); assert.equal(C.outcome(10, 11), false);
 });
 
 test("rank helpers, tools, spending, decisions, time text", () => {
@@ -118,7 +119,7 @@ test("rank helpers, tools, spending, decisions, time text", () => {
   assert.equal(C.rankAllows("", null), true); assert.equal(C.rankAllows("common", null), false);
   assert.deepEqual(C.craftTool(smith, { tools: { smith: 1, mason: 2 } }), { key: "mason", mult: 2 });
   assert.equal(C.craftTool(smith, { tools: { smith: 0.5 } }), null);
-  assert.equal(C.spends(false, rules), false); assert.equal(C.spends(false, { ...rules, failMaterials: "lose" }), true); assert.equal(C.spends(true, rules), true);
+  assert.equal(C.spends(false, rules), true, "default: used up on a failure"); assert.equal(C.spends(false, { ...rules, failMaterials: "keep" }), false); assert.equal(C.spends(true, { ...rules, failMaterials: "keep" }), true);
   assert.deepEqual(C.decide({ dc: 10, total: 12 }, "approve"), { success: true });
   assert.equal(C.decide({ dc: null, total: 12 }, "approve"), null);
   assert.deepEqual(C.decide({ dc: null, total: 3 }, "success"), { success: true });
@@ -126,4 +127,19 @@ test("rank helpers, tools, spending, decisions, time text", () => {
   assert.equal(C.decide({ dc: 10, total: 3 }, "bogus"), null);
   assert.equal(C.hoursText(0.5), "30 minutes"); assert.equal(C.hoursText(1), "1 hour");
   assert.equal(C.hoursText(9, 6), "9 hours (1.5 days of 6 hours)"); assert.equal(C.hoursText(null), "");
+});
+
+test("materials from the inventory: typed names match carried items, the notice says what goes", () => {
+  const typed = cleanRecipe({ ...blade, materials: [{ name: "Copper Bar", qty: 2 }, { name: "Weak Flux", qty: 1 }] });
+  const carried = [{ id: "c1", name: "copper  bar", qty: 3, sources: ["Item.other"] }, { id: "f1", name: "Weak Flux", qty: 1, sources: [] }];
+  const a = C.assess({ ...base, recipe: typed, inventory: carried });
+  assert.deepEqual(a.materials.map(m => [m.name, m.have, m.need, m.ok]), [["Copper Bar", 3, 2, true], ["Weak Flux", 1, 1, true]]);
+  assert.equal(a.canCraft, true, a.problems.join("; "));
+  assert.deepEqual(C.consumePlan(carried, typed.materials), { updates: [{ _id: "c1", "system.quantity": 1 }], deletes: ["f1"] });
+  assert.equal(C.assess({ ...base, recipe: typed, inventory: carried.slice(0, 1) }).problems[0], "Missing materials.");
+  assert.deepEqual(C.usedList(typed.materials), ["2× Copper Bar", "1× Weak Flux"]);
+  assert.equal(C.usesNotice(a.materials, { fail: "lose" }), "Crafting uses up: 2× Copper Bar, 1× Weak Flux (taken when you roll, success or failure).");
+  assert.equal(C.usesNotice(a.materials, { fail: "keep" }), "Crafting uses up: 2× Copper Bar, 1× Weak Flux (taken when you roll, on success; kept on a failure).");
+  assert.match(C.usesNotice(a.materials, { fail: "lose", charge: true, approval: true }), /Weak Flux, the coin cost \(taken when the GM decides/);
+  assert.equal(C.usesNotice([], { fail: "lose" }), "Crafting uses up nothing from the inventory.");
 });

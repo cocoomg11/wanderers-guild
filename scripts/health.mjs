@@ -77,8 +77,9 @@ export function run(opts = {}) {
       const st = CM.rulesStatus(Data.rules());
       if (st.set.length) add("ok", `Crafting rules set: ${st.set.join(", ")}.`);
       if (st.unset.length) add("info", `Crafting rules not set (fill in from your rules, setup › Crafting rules): ${st.unset.join(", ")}.`);
-      if (!st.set.includes("a DC")) add("info", "No DC is set anywhere, so every craft waits for a GM to decide (unless a recipe sets its own DC).");
-      add("info", S.get("craftApproval") ? "GM approves each craft: on." : "GM approves each craft: off (results follow the roll).");
+      if (!st.set.includes("a DC")) add("info", "No DC is set anywhere, so every craft succeeds on the roll (unless a recipe sets its own DC).");
+      add("info", S.get("craftApproval") ? "GM approves each craft: on (crafts wait for a GM's Approve)." : "GM approves each craft: off (results follow the roll; nothing waits).");
+      add("info", Data.rules().failMaterials === "keep" ? "On a failed check the materials are kept." : "On a failed check the materials are used up (default).");
       add("info", "Crafting time is shown for reference only; the calendar is never advanced.");
     });
     h.check(add => {

@@ -148,6 +148,8 @@
 .wg-craft .wg-mat { display: flex; justify-content: space-between; gap: 8px; padding: 5px 10px; font-size: 13px; border-bottom: 1px solid rgba(255, 255, 255, 0.04); }
 .wg-craft .wg-mat b { font-variant-numeric: tabular-nums; }
 .wg-craft .wg-foot { margin-top: auto; display: flex; align-items: center; gap: 10px; padding-top: 10px; border-top: 1px solid color-mix(in srgb, var(--wg-trim) 40%, transparent); font-size: 12px; }
+.wg-craft .wg-footmsg { display: flex; flex-direction: column; gap: 2px; }
+.wg-craft .wg-uses { margin: 0; color: var(--wg-gold); }
 .wg-craft .wg-lab { color: var(--wg-ink2); font-size: 12px; }
 .wg-craft .wg-num { width: 4rem; height: 26px; color: var(--wg-ink); background: rgba(0, 0, 0, 0.45); border: 1px solid var(--wg-edge); border-radius: 4px; }
 .wg-craft .wg-gbtn.big { height: 34px; padding: 0 16px; font-size: 13px; }

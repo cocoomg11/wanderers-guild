@@ -8,7 +8,7 @@
  */
 import { esc } from "./const.mjs";
 import { quality, itemSlot, UI_CLASSES } from "../vendor/wanderers-core/index.mjs";
-import { hoursText } from "./craft-model.mjs";
+import { hoursText, usesNotice } from "./craft-model.mjs";
 import { signed } from "./ranks-model.mjs";
 import { ICONS } from "./professions-model.mjs";
 
@@ -48,6 +48,7 @@ export const TIME_NOTE = "in game, for reference: the calendar is not advanced";
  * @property {boolean} helperDivides
  * @property {number | null} hoursPerDay
  * @property {string} failText
+ * @property {string} [failRule] "lose" (default) or "keep": what a failure does to the materials
  * @property {boolean} approval
  * @property {boolean} noGM no GM is connected
  * @property {boolean} [locked] a craft is under way, or this user only observes the actor
@@ -101,11 +102,12 @@ function detailHTML(v, r) {
   const mats = r.materials.length
     ? r.materials.map(m => `<li class="wg-mat"><span class="wg-nm">${esc(m.name)}</span><b class="${m.ok ? "wg-pos" : "wg-neg"}">${m.have} / ${m.need}</b></li>`).join("")
     : `<li class="wg-mat"><span class="wg-dim">No materials listed.</span></li>`;
+  const uses = usesNotice(r.materials, { fail: v.failRule ?? "lose", charge: r.charge > 0, approval: v.approval });
   const time = r.hours === null ? `<span class="wg-dim">not set (Crafting rules)</span>`
     : `${esc(hoursText(r.hours, v.hoursPerDay))}${r.timeNotes.length ? ` <span class="wg-dim">(${esc(r.timeNotes.join(", "))})</span>` : ""} <span class="wg-dim">· ${esc(TIME_NOTE)}</span>`;
   const rankLine = !r.rarity ? `Any <span class="wg-dim">(mundane)</span>`
     : r.need ? `${esc(r.need.name)} ${signed(r.need.bonus)} or higher <span class="${r.rankOk ? "wg-pos" : "wg-neg"}">(you: ${esc(v.rankText)})</span>` : `<span class="wg-neg">No rank crafts ${esc(r.rarityLabel)}</span>`;
-  const check = r.tool ? `Roll ${esc(r.tool.label)}${r.toolTotal ? ` <span class="wg-dim">(${esc(r.toolTotal)})</span>` : ""}, ${r.dc === null ? `<span class="wg-dim">DC set by the GM</span>` : `DC ${r.dc}`}` : `<span class="wg-neg">No proficient tool</span>`;
+  const check = r.tool ? `Roll ${esc(r.tool.label)}${r.toolTotal ? ` <span class="wg-dim">(${esc(r.toolTotal)})</span>` : ""}, ${r.dc === null ? `<span class="wg-dim">no DC set: the roll crafts it</span>` : `DC ${r.dc}`}` : `<span class="wg-neg">No proficient tool</span>`;
   const req = `<section class="wg-box"><h4>Requirements</h4><ul class="wg-kv wg-pad">
     <li><span>Tool</span><b>${r.tool ? `<i class="wg-pm ${r.tool.mult >= 2 ? "e" : "f"}" aria-hidden="true"></i> ${esc(r.tool.label)}` : `<span class="wg-neg">not proficient</span>`}</b></li>
     <li><span>Rank</span><b>${rankLine}</b></li>
@@ -116,10 +118,10 @@ function detailHTML(v, r) {
     <li><span>Coin cost</span><b>${r.cost === null ? `<span class="wg-dim">not set (Crafting rules)</span>` : `${v.money(r.cost)}${r.charge ? ` <span class="${r.coinOk ? "wg-dim" : "wg-neg"}">· paid from your coin</span>` : ` <span class="wg-dim">· not charged</span>`}`}</b></li>
     <li><span>On a failure</span><b class="wg-dim">${esc(v.failText)}</b></li></ul></section>`;
   const helpers = v.helpersMax > 0 ? `<label class="wg-lab" for="wg-helpers">Helpers</label><input id="wg-helpers" class="wg-num" type="number" min="0" max="${v.helpersMax}" step="1" value="${v.helpers}" data-wg-helpers>${v.helperDivides ? "" : `<span class="wg-dim">(time not divided)</span>`}` : "";
-  const why = r.problems.length ? `<span class="wg-neg wg-grow">${esc(r.problems[0])}</span>` : `<span class="wg-dim wg-grow">One ${esc(r.tool?.label ?? "tool")} check${v.approval || r.dc === null ? "; the GM decides the result" : ""}.</span>`;
+  const why = r.problems.length ? `<span class="wg-neg">${esc(r.problems[0])}</span>` : `<span class="wg-dim">One ${esc(r.tool?.label ?? "tool")} check${v.approval ? "; the GM approves the result" : r.dc === null ? "; no DC is set, so the roll crafts it" : ""}.</span>`;
   const can = r.canCraft && !v.noGM && !v.locked;
-  const foot = `<footer class="wg-foot">${helpers}${why}<button type="button" class="wg-gbtn big pri" data-action="wgCraftNow" data-id="${esc(r.id)}"${can ? "" : " disabled"}>${svg(ICONS.hammer.d)}Craft</button></footer>`;
-  return `${head}<div class="wg-two"><section class="wg-box"><h4>Materials<span class="r">have / need</span></h4><ul class="wg-list">${mats}</ul></section>${req}</div>${cost}${foot}`;
+  const foot = `<footer class="wg-foot">${helpers}<div class="wg-grow wg-footmsg">${why}<p class="wg-uses" role="note" data-wg-uses>${esc(uses)}</p></div><button type="button" class="wg-gbtn big pri" data-action="wgCraftNow" data-id="${esc(r.id)}" title="${esc(uses)}"${can ? "" : " disabled"}>${svg(ICONS.hammer.d)}Craft</button></footer>`;
+  return `${head}<div class="wg-two"><section class="wg-box"><h4>Materials<span class="r">in the inventory: have / need</span></h4><ul class="wg-list">${mats}</ul></section>${req}</div>${cost}${foot}`;
 }
 
 /** The Craft page. @param {CraftView} v */
@@ -187,7 +189,7 @@ export const craftWindowHTML = v => (v.mode === "recipes" ? recipesPageHTML(v) :
  * @property {string} reason refusal or error text
  * @property {string[]} used what was used up (plain text)
  * @property {string} coin coin markup, or ""
- * @property {boolean} approvalAsked the GM was asked because of the approval switch (else: no DC)
+ * @property {boolean} approvalAsked the GM was asked because of the approval switch (the only reason a card waits)
  */
 
 const STATE_TEXT = { pending: "Waiting for the GM", done: "Crafted", failed: "Failed", refused: "Refused", error: "Not crafted" };
@@ -195,16 +197,17 @@ const STATE_TEXT = { pending: "Waiting for the GM", done: "Crafted", failed: "Fa
 /** The craft chat card (GM buttons carry `data-wg-choice` and the `wg-gm-only` class; craft-leader.mjs hides them from players). @param {CardView} c */
 export function cardHTML(c) {
   const q = qualityOf(c.rarity);
-  const roll = c.total === null ? "" : `<p class="wg-cline"><span>${esc(c.toolLabel)} check</span><b>${c.total}${c.dc === null ? "" : ` vs DC ${c.dc}`}</b></p>`;
+  const noDc = c.dc === null && c.state === "done" ? ` <span class="wg-dim">(no DC set: crafted)</span>` : "";
+  const roll = c.total === null ? "" : `<p class="wg-cline"><span>${esc(c.toolLabel)} check</span><b>${c.total}${c.dc === null ? "" : ` vs DC ${c.dc}`}${noDc}</b></p>`;
   const time = c.timeText ? `<p class="wg-cline"><span>Time</span><b>${esc(c.timeText)} <span class="wg-dim">(${esc(TIME_NOTE)})</span></b></p>` : "";
-  const used = c.used.length ? `<p class="wg-cline"><span>Used</span><b>${esc(c.used.join(", "))}</b></p>` : "";
+  const used = c.used.length ? `<p class="wg-cline"><span>Used up</span><b>${esc(c.used.join(", "))}</b></p>` : "";
   const coin = c.coin ? `<p class="wg-cline"><span>Coin</span><b>${c.coin}</b></p>` : "";
   const reason = c.reason ? `<p class="wg-creason">${esc(c.reason)}</p>` : "";
   let buttons = "";
   if (c.state === "pending") {
     const b = (/** @type {string} */ choice, /** @type {string} */ label, /** @type {string} */ cls = "") => `<button type="button" class="wc-btn wc-btn-sm ${cls}" data-wg-choice="${choice}">${esc(label)}</button>`;
     buttons = `<div class="wg-cbtns wg-gm-only">${c.dc === null ? `${b("success", "Success", "wc-btn-primary")}${b("failure", "Failure")}` : b("approve", c.total !== null && c.total >= c.dc ? "Approve success" : "Approve failure", "wc-btn-primary")}${b("refuse", "Refuse", "wc-btn-danger")}</div>
-      <p class="wg-dim wg-player-only">${c.approvalAsked ? "The GM approves each craft." : "No DC is set: the GM decides."}</p>`;
+      <p class="wg-dim wg-player-only">The GM approves each craft; nothing is made or used up until then.</p>`;
   }
   return `<div class="${UI_CLASSES.join(" ")} wg-chat wg-chat-${esc(c.state)}">
     <header class="wg-chead">${itemSlot({ img: c.img || "icons/svg/item-bag.svg", name: c.recipeName, rarity: q, count: c.qty })}

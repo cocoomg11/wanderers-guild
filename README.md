@@ -46,7 +46,7 @@ In Foundry's **Add-on Modules › Install Module**, paste the manifest URL:
 | Professions window | owners, observers, GM | One character's professions: a card per crafting or gathering profession (rank, ladder, linked tool, highest rarity, next rank), the other professions as a list, and (switch) the ones not learned yet. Read only. |
 | Setup window | GM | Professions (definitions), Ranks (rank names and rarities per proficiency bonus), Recipes, Crafting rules, Settings, Health check, Data (remove the module's data). |
 | Sheet button | owners, observers | The hammer button in the header of dnd5e character sheets. |
-| Crafting window | owners (observers look), GM | Per character and profession. **Craft**: recipes with materials have / need, rank check, tool check and DC, time (for reference only: the calendar is never advanced), cost; Craft rolls the tool check and the active GM's client makes the item. **Recipes**: learn (players, when allowed), teach and forget (GM). |
+| Crafting window | owners (observers look), GM | Per character and profession. **Craft**: recipes with materials have / need from the character's inventory, rank check, tool check and DC, time (for reference only: the calendar is never advanced), cost, and what the craft will use up; Craft rolls the tool check and the active GM's client uses up the materials (on a failure too, by default) and makes the item. **Recipes**: learn (players, when allowed), teach and forget (GM). |
 | Recipes, Crafting rules | GM | Setup window pages: the world's recipes, and every crafting number (empty until you fill them in), each with Import / export JSON. |
 
 How it works, in detail: [docs/professions.md](docs/professions.md) and [docs/crafting.md](docs/crafting.md).
@@ -67,7 +67,7 @@ On the setup window's **Settings** page (instant):
 | --- | --- | --- |
 | Show professions not learned yet | on | The Professions window also lists the world's other professions and the tool each one needs. |
 | Players learn recipes themselves | on | A player can learn a recipe of their profession that their rank allows. Off: only a GM teaches. |
-| GM approves each craft | off | After the tool check a GM card with Approve / Refuse decides; nothing is made or used up until then. Off: the result follows the roll (a craft with no DC always asks the GM). |
+| GM approves each craft | off | After the tool check a GM card with Approve / Refuse decides; nothing is made or used up until then. Off: the craft resolves when the roll lands and nothing waits for a GM (a craft with no DC succeeds on the roll). |
 | Prices in the world's coins | off | Prices in Wanderer's Toolkit's coins (when it is active), paid through the toolkit. Off: book values. |
 | Debug logging | off | Writes the module's decisions to the browser console. |
 
@@ -114,7 +114,8 @@ Removing it: the setup window's **Data** page, or `api.cleanup` (a dry-run `plan
 - **A character shows no professions.** It needs proficiency (not half proficiency) with one of a profession's linked tools; check the character's Tools on the dnd5e sheet and the links on the setup window's Professions page.
 - **The rank looks wrong.** The rank is the proficiency bonus the dnd5e sheet shows (effects that change it change the rank too). The rank names and rarities are on the setup window's Ranks page.
 - **Craft is greyed out.** The line next to it says why: the recipe is unknown, the rank is too low, materials or coin are missing, or no GM is connected.
-- **Every craft waits for the GM.** No DC is set: give the recipe a DC, or fill in a base DC or the rarity table on the Crafting rules page.
+- **Every craft succeeds.** No DC is set, so the roll crafts it: give the recipe a DC, or fill in a base DC or the rarity table on the Crafting rules page.
+- **Every craft waits for the GM.** *GM approves each craft* is on (setup › Settings); turn it off to resolve crafts on the roll.
 - **The time says "not set".** Fill in the time rules on the Crafting rules page (or the recipe's own time). The time is only shown; the calendar never moves.
 - **Something else.** Run the setup window's **Health** page and look for warnings.
 

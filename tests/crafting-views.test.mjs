@@ -68,10 +68,13 @@ test("chat card: states, GM buttons, escaping", () => {
   assert.ok(pending.includes("wg-gm-only") && pending.includes("wg-player-only"));
   assert.ok(pending.includes(V.TIME_NOTE));
   assert.ok(pending.startsWith(`<div class="${UI_CLASSES.join(" ")} wg-chat`), "core's root from UI_CLASSES");
-  const noDc = V.cardHTML({ ...c, dc: null, approvalAsked: false });
-  assert.ok(noDc.includes(`data-wg-choice="success"`) && noDc.includes(`data-wg-choice="failure"`) && noDc.includes("No DC is set"));
-  const done = V.cardHTML({ ...c, state: "done", used: ["3 × Bar <x>"], coin: "<i>5</i>" });
-  assert.ok(!done.includes("data-wg-choice") && done.includes("Crafted") && done.includes("3 × Bar &lt;x&gt;") && done.includes("<i>5</i>"));
+  const approvalNoDc = V.cardHTML({ ...c, dc: null });
+  assert.ok(approvalNoDc.includes(`data-wg-choice="success"`) && approvalNoDc.includes(`data-wg-choice="failure"`) && approvalNoDc.includes("The GM approves each craft"));
+  assert.ok(!approvalNoDc.includes("no DC set: crafted"), "only a finished craft says so");
+  const done = V.cardHTML({ ...c, state: "done", used: ["3× Bar <x>"], coin: "<i>5</i>" });
+  assert.ok(!done.includes("data-wg-choice") && done.includes("Crafted") && done.includes("Used up") && done.includes("3× Bar &lt;x&gt;") && done.includes("<i>5</i>"));
+  const noDc = V.cardHTML({ ...c, state: "done", dc: null, approvalAsked: false, used: ["1× Bar"] });
+  assert.ok(noDc.includes("14") && noDc.includes("no DC set: crafted") && !noDc.includes("vs DC"));
   assert.ok(V.cardHTML({ ...c, state: "error", reason: "Nope <b>" }).includes("Nope &lt;b&gt;"));
   assert.equal(V.qualityOf(""), "common"); assert.equal(V.qualityOf("veryRare"), "epic");
 });
@@ -108,4 +111,21 @@ test("setup: rules page and reader (empty by default, hints to fill in)", () => 
   const r = normalizeRules(raw);
   assert.deepEqual([r.timeHours, r.timePerGp, r.rounding, r.byRarity.rare.hours, r.byRarity.rare.dc, r.chargeCoin, r.consumablePct], [2, 5, "day", 30, null, true, 100]);
   assert.deepEqual(r.rankTime, { 3: 50 });
+});
+
+test("Craft page: what the craft uses up is said before the roll, next to the button and as its tooltip", () => {
+  const withMats = [mk({ id: "known-one", name: "Pot", materials: [{ name: "Copper Bar", qty: 2 }, { name: "Weak Flux", qty: 1 }] })];
+  const html = V.craftPageHTML({ ...base, rows: withMats });
+  const text = "Crafting uses up: 2× Copper Bar, 1× Weak Flux (taken when you roll, success or failure).";
+  assert.ok(html.includes(`<p class="wg-uses" role="note" data-wg-uses>${text}</p>`), "the notice in the footer");
+  assert.match(html, new RegExp(`data-action="wgCraftNow"[^>]*title="${text.replace(/[().]/g, "\\$&")}"`), "the button's tooltip");
+  assert.ok(html.includes("in the inventory: have / need") && html.includes("0 / 2"));
+  assert.ok(V.craftPageHTML({ ...base, rows: withMats, failRule: "keep" }).includes("on success; kept on a failure"));
+  assert.ok(V.craftPageHTML({ ...base, rows: withMats, approval: true }).includes("taken when the GM decides"));
+  assert.ok(!html.includes("type=\"checkbox\"") && !html.includes("confirm"), "no confirm step");
+  const noDc = mk({ id: "auto", name: "Free", auto: true });
+  const bare = assess({ recipe: cleanRecipe({ id: "auto", auto: true, profession: "smithing", result: { uuid: "Item.x", name: "Free" } }), profession: prof, rules: normalizeRules(undefined), ranks: defaultRanks(), facts: { pb: 2, tools: { smith: 1 } }, known: normalizeKnown(undefined), inventory: [], purse: 0, values: BOOK_VALUES, worldValues: BOOK_VALUES });
+  const free = V.craftPageHTML({ ...base, rows: [{ ...noDc, ...bare, group: "x", img: "", notes: "", qty: 1, toolTotal: "", source: "everyone" }] });
+  assert.ok(free.includes("no DC set: the roll crafts it") && free.includes("no DC is set, so the roll crafts it"), "no DC: nothing waits for the GM");
+  assert.ok(!/wgCraftNow"[^>]*disabled/.test(free));
 });

@@ -4,8 +4,11 @@
  * **Rules are world data.** Every number crafting uses (time per value of the item, the material cost as a share of the price, the
  * time, cost and DC per rarity, the consumable modifier, helpers, a time change per rank, a base DC) lives in the world setting
  * `craftRules`, edited on the setup window's Crafting rules page or pasted as JSON. Nothing from any published rulebook ships here:
- * the defaults are empty ("not set") or neutral (100 %, no helpers, materials kept on a failure), and the GM fills them in from the
- * rules their table uses. A craft with no DC at all goes to the GM to decide.
+ * the defaults are empty ("not set") or neutral (100 %, no helpers, no coin charged), and the GM fills them in from the rules their
+ * table uses. A craft with no DC at all succeeds on the roll (the roll is still made and shown).
+ *
+ * **Materials come from the inventory** and are used up when the roll lands: on a success, and on a failure too unless the GM's
+ * rule says failures keep them (`failMaterials`, default "lose").
  *
  * **Time is for reference.** The time a craft takes is shown to the player and the GM; nothing here (or anywhere in the module)
  * advances the world's clock.
@@ -31,7 +34,7 @@ export const DAY_HOURS_MAX = 24;
 export const ROLL_MAX_AGE_MS = 10 * 60 * 1000;
 
 /** What happens to the materials (and the coin cost) on a failed check. */
-export const FAIL_RULES = Object.freeze({ keep: "Kept: nothing is used up", lose: "Used up: the materials (and any coin cost) are spent" });
+export const FAIL_RULES = Object.freeze({ lose: "Used up: the materials (and any coin cost) are spent on a failure too", keep: "Kept: a failure uses up nothing" });
 /** How a time from the price is rounded. */
 export const ROUNDING = Object.freeze({ none: "Not rounded", hour: "Up to a whole hour", day: "Up to a whole working day" });
 
@@ -61,7 +64,7 @@ export const BOOK_VALUES = Object.freeze({ pp: 1000, gp: 100, ep: 50, sp: 10, cp
 export const defaultRules = () => ({
   v: RULES_VERSION, timeHours: null, timePerGp: null, rounding: "hour", hoursPerDay: null, materialPct: null,
   byRarity: Object.fromEntries(RARITY_KEYS.map(k => [k, { hours: null, cost: null, dc: null }])),
-  consumablePct: 100, dc: null, helpersMax: 0, helperDivides: false, failMaterials: "keep", chargeCoin: false, rankTime: {}
+  consumablePct: 100, dc: null, helpersMax: 0, helperDivides: false, failMaterials: "lose", chargeCoin: false, rankTime: {}
 });
 
 /** @param {unknown} v */
@@ -375,17 +378,34 @@ export function assess(a) {
 }
 
 /**
- * A finished check: success when the total meets the DC; with no DC the GM decides (`null`).
+ * A finished check: success when the total meets the DC; with no DC set anywhere the roll crafts it (success).
  * @param {number} total @param {number | null} dc
  */
-export const outcome = (total, dc) => (dc === null ? null : Number(total) >= dc);
+export const outcome = (total, dc) => (dc === null ? true : Number(total) >= dc);
 
 /**
  * What a craft does to the character, by result: success makes the item and uses up the materials (and the coin cost when it is
- * charged); a failure uses them up only when the rules say "lose".
+ * charged); a failure uses them up too unless the rules say "keep".
  * @param {boolean} success @param {CraftRules} rules
  */
-export const spends = (success, rules) => success || rules.failMaterials === "lose";
+export const spends = (success, rules) => success || rules.failMaterials !== "keep";
+
+/** What a recipe's materials use up, as "2× Copper Bar" lines. @param {Array<{ name: string, qty?: number, need?: number }>} materials */
+export const usedList = materials => materials.map(m => `${Number(m.qty ?? m.need) || 1}× ${m.name || "material"}`);
+
+/**
+ * The notice shown before a craft (next to the Craft button and as its tooltip): what the craft takes from the inventory and when.
+ * `charge` adds the coin cost; `approval` (GM approves each craft) moves the moment to the GM's decision.
+ * @param {Array<{ name: string, need: number }>} materials @param {{ fail: string, charge?: boolean, approval?: boolean }} o
+ */
+export function usesNotice(materials, o) {
+  const items = usedList(materials);
+  if (o.charge) items.push("the coin cost");
+  if (!items.length) return "Crafting uses up nothing from the inventory.";
+  const when = o.approval ? "when the GM decides" : "when you roll";
+  const tail = o.fail === "keep" ? `taken ${when}, on success; kept on a failure` : `taken ${when}, success or failure`;
+  return `Crafting uses up: ${items.join(", ")} (${tail}).`;
+}
 
 // ------------------------------------------------------------------ the craft card's state
 

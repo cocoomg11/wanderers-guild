@@ -1,7 +1,8 @@
 /**
  * The Crafting window (feature "crafting"): one per character and profession, two pages. **Craft**: the profession's recipes with
  * what's missing, the time (for reference), cost, DC and rank check; Craft rolls the linked tool check (dnd5e `rollToolCheck`) on
- * this client and sends the roll's chat message to the active GM's client, which makes the item (craft-leader.mjs). **Recipes**:
+ * this client and sends the roll's chat message to the active GM's client, which uses up the materials from the inventory and makes the
+ * item (craft-leader.mjs); the detail says beforehand what will be used up (no confirm dialog). **Recipes**:
  * known, learnable and higher-rank recipes; Learn (players, when allowed), Teach and Forget (GM) are requests too. Nothing here
  * writes a document. Untested in Node: the pages are in crafting-view.mjs, the decision in craft-model.mjs.
  */
@@ -72,7 +73,7 @@ export class CraftingApp extends Base {
       rankText: rk.row ? `${rk.row.name} ${signed(rk.row.bonus)}` : "No rank", craftsUpTo: rk.row?.rarity ? rarityLabel(rk.row.rarity, ctx.rarityLabels) : "",
       gm: !!game.user?.isGM, playersLearn: !!S.get("playersLearn"), economyNote: Eco.note(), query: this.query, filter: this.filter,
       rows: /** @type {any} */ (rows), selected: this.selected, helpers: this.helpers, helpersMax: ctx.rules.helpersMax, helperDivides: ctx.rules.helperDivides,
-      hoursPerDay: ctx.rules.hoursPerDay, failText: FAIL_RULES[ctx.rules.failMaterials], approval: !!S.get("craftApproval"), noGM: !leader.activeGM(), locked: this.busy || !canUse(this.actor),
+      hoursPerDay: ctx.rules.hoursPerDay, failText: FAIL_RULES[ctx.rules.failMaterials], failRule: ctx.rules.failMaterials, approval: !!S.get("craftApproval"), noGM: !leader.activeGM(), locked: this.busy || !canUse(this.actor),
       money: (/** @type {number} */ n) => Eco.html(n)
     };
   }

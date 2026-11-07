@@ -150,7 +150,7 @@ export function rulesPage(m) {
   const status = `<p class="wc-hint">${m.status.set.length ? `Set: ${esc(m.status.set.join(", "))}.` : "Nothing is set yet."}${m.status.unset.length ? ` Not set: ${esc(m.status.unset.join(", "))}.` : ""}</p>`;
   return pagehead("Crafting rules", `<span class="wc-hint">Your table's numbers: nothing is filled in for you. Fill in what your rules say, leave the rest empty.</span>`)
     + `<div class="wc-alert wc-info" role="note"><i class="fa-solid fa-book" aria-hidden="true"></i><div><p class="wc-alert-title">Fill these in from your rules</p>
-      <p>The module ships no rulebook figures. Empty fields mean "not set": the Crafting window says so, and a craft with no DC anywhere goes to the GM to decide. A recipe's own DC, time and cost win over this page. Time is shown to the player and the GM for reference only; the calendar is never advanced.</p>${status}</div></div>`
+      <p>The module ships no rulebook figures. Empty fields mean "not set": the Crafting window says so, and a craft with no DC anywhere succeeds on the roll. Materials come from the character's inventory and are used up when the roll lands. A recipe's own DC, time and cost win over this page. Time is shown to the player and the GM for reference only; the calendar is never advanced.</p>${status}</div></div>`
     + `<form class="wc-panel" data-form="rules" autocomplete="off"><div class="wc-panel-body wg-form">
       <h3 class="wg-h">Time from the item's price</h3>
       <p class="wg-inline">${num("timeHours", r.timeHours, "Hours of work")} hours of work per ${num("timePerGp", r.timePerGp, "Gold pieces of price")} gp of the item's price. Rounded ${sel("rounding", ROUNDING, r.rounding)}.</p>
@@ -163,7 +163,7 @@ export function rulesPage(m) {
       <p class="wg-inline">Consumables take ${num("consumablePct", r.consumablePct, "Consumable percentage", `max="${PCT_MAX}"`)} % of the rarity table's time and cost.</p>
       <h3 class="wg-h">Check</h3>
       <label class="wg-field"><span>Base DC</span><span>${num("dc", r.dc, "Base DC", `min="${DC_MIN}" max="${DC_MAX}" step="1"`)} <span class="wc-hint">when neither the recipe nor its rarity sets one</span></span></label>
-      <label class="wg-field"><span>On a failed check</span>${sel("failMaterials", FAIL_RULES, r.failMaterials)}</label>
+      <label class="wg-field"><span>On a failed check</span><span>${sel("failMaterials", FAIL_RULES, r.failMaterials)} <span class="wc-hint">materials are taken when the roll lands; players see this before they craft</span></span></label>
       <h3 class="wg-h">Helpers</h3>
       <p class="wg-inline">Up to ${num("helpersMax", r.helpersMax, "Most helpers", `max="${HELPERS_MAX}" step="1"`)} helpers. <label class="wg-check"><input type="checkbox" name="helperDivides"${r.helperDivides ? " checked" : ""}> Each helper divides the time</label></p>
       <h3 class="wg-h">Time by rank</h3>

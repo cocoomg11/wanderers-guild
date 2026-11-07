@@ -7,8 +7,11 @@
  *
  * The tool check is rolled on the crafter's client (dnd5e `rollToolCheck`); the request names the roll's chat message and the leader
  * reads the total from that message (author = the sender, our flag names this actor and recipe, at most ROLL_MAX_AGE_MS old, not used
- * before; then it is marked used). As with any Foundry roll, a client can't be prevented from forging one: turn on *GM approves
- * each craft* if that matters at your table.
+ * before; then it is marked used) and resolves the craft at once: the materials are taken from the inventory (on a failure too,
+ * unless the rules keep them), and on a success the item is made. A craft with no DC set anywhere succeeds on the roll. Nothing waits
+ * for a GM unless *GM approves each craft* is on. If the materials (or the coin) are gone by then, the craft is refused and nothing is
+ * used. Crafts for one character are handled one after another, so two rolls can't spend the same stack. As with any Foundry roll, a
+ * client can't be prevented from forging one: turn on *GM approves each craft* if that matters at your table.
  *
  * Writes: `flags.wanderers-guild.recipes` on actors (known recipes), the crafted item (created, or added to a matching stack), the
  * materials' quantities (lowered or deleted), the coin cost (`system.currency`, or the toolkit's `pay`), `flags.wanderers-guild.rollUsed`
@@ -26,6 +29,19 @@ import { cardHTML } from "./crafting-view.mjs";
 
 /** Roll messages being handled (a second request for the same roll waits its turn and then finds it used). */
 const BUSY = new Set();
+/** The last queued craft per actor UUID: crafts for one character run one after another. @type {Map<string, Promise<unknown>>} */
+const QUEUE = new Map();
+
+/**
+ * Runs `fn` after the actor's earlier crafts have finished (failed ones too).
+ * @template T @param {string} key @param {() => Promise<T>} fn @returns {Promise<T>}
+ */
+async function serial(key, fn) {
+  const run = (QUEUE.get(key) ?? Promise.resolve()).catch(() => {}).then(fn);
+  const tail = run.catch(() => {});
+  QUEUE.set(key, tail);
+  try { return await run; } finally { if (QUEUE.get(key) === tail) QUEUE.delete(key); }
+}
 
 /** @param {string} uuid */
 async function actorOf(uuid) {
@@ -124,7 +140,7 @@ async function apply(actor, recipe, a, success) {
       await actor.createEmbeddedDocuments("Item", [data]);
     }
   }
-  const used = spend ? recipe.materials.map(m => `${m.qty} × ${m.name || "material"}`) : [];
+  const used = spend ? CM.usedList(recipe.materials) : [];
   if (plan.updates.length) await actor.updateEmbeddedDocuments("Item", plan.updates);
   if (plan.deletes.length) await actor.deleteEmbeddedDocuments("Item", plan.deletes);
   let coin = "";
@@ -151,27 +167,30 @@ const postCard = (actor, st, content, whisper) => ChatMessage.create({ content, 
 async function onCraft(data, user) {
   if (BUSY.has(data.roll)) return log("craft: that roll is being handled");
   BUSY.add(data.roll);
-  try {
-    const actor = await actorOf(data.actor); if (!actor) return log("craft: no such actor");
-    if (!owns(actor, user)) return log(`craft refused: ${user.name} doesn't own ${actor.name}`);
-    const recipe = Data.recipes().list.find(r => r.id === data.recipe); if (!recipe) return tell(user, actor, "That recipe no longer exists.");
-    const msg = game.messages.get(data.roll);
-    const roll = readRoll(msg, user, actor, recipe.id);
-    if ("error" in roll) return tell(user, actor, `${recipe.name}: ${roll.error}`);
-    await msg.setFlag(ID, "rollUsed", true);
-    const a = assessIn(context(actor), recipe, data.helpers);
-    const rules = Data.rules();
-    const st = { v: CM.CARD_VERSION, state: "pending", actor: actor.uuid, recipe: recipe.id, user: user.id, roll: data.roll, tool: a.tool?.key ?? "", total: roll.total, dc: a.dc, helpers: data.helpers, whisper: roll.whisper, approval: !!S.get("craftApproval"), timeText: CM.hoursText(a.hours, rules.hoursPerDay), at: Date.now() };
-    if (!a.canCraft) {
-      st.state = "error";
-      return postCard(actor, st, cardView(st, { actor, recipe, reason: a.problems.join(" ") }), st.whisper);
-    }
-    if (st.approval || a.dc === null) {
-      log(`craft ${recipe.name}: waiting for the GM`);
-      return postCard(actor, st, cardView(st, { actor, recipe }), [...new Set([user.id, ...gmIds()])]);
-    }
-    await finish(actor, recipe, a, st, roll.total >= /** @type {number} */ (a.dc), null);
-  } finally { BUSY.delete(data.roll); }
+  try { await serial(data.actor, () => craftNow(data, user)); } finally { BUSY.delete(data.roll); }
+}
+
+/** @param {{ actor: string, recipe: string, roll: string, helpers: number }} data @param {any} user */
+async function craftNow(data, user) {
+  const actor = await actorOf(data.actor); if (!actor) return log("craft: no such actor");
+  if (!owns(actor, user)) return log(`craft refused: ${user.name} doesn't own ${actor.name}`);
+  const recipe = Data.recipes().list.find(r => r.id === data.recipe); if (!recipe) return tell(user, actor, "That recipe no longer exists.");
+  const msg = game.messages.get(data.roll);
+  const roll = readRoll(msg, user, actor, recipe.id);
+  if ("error" in roll) return tell(user, actor, `${recipe.name}: ${roll.error}`);
+  await msg.setFlag(ID, "rollUsed", true);
+  const a = assessIn(context(actor), recipe, data.helpers);
+  const rules = Data.rules();
+  const st = { v: CM.CARD_VERSION, state: "pending", actor: actor.uuid, recipe: recipe.id, user: user.id, roll: data.roll, tool: a.tool?.key ?? "", total: roll.total, dc: a.dc, helpers: data.helpers, whisper: roll.whisper, approval: !!S.get("craftApproval"), timeText: CM.hoursText(a.hours, rules.hoursPerDay), at: Date.now() };
+  if (!a.canCraft) {
+    st.state = "refused";
+    return postCard(actor, st, cardView(st, { actor, recipe, reason: `Nothing was made or used up: ${a.problems.join(" ")}` }), st.whisper);
+  }
+  if (st.approval) {
+    log(`craft ${recipe.name}: waiting for the GM's approval`);
+    return postCard(actor, st, cardView(st, { actor, recipe }), [...new Set([user.id, ...gmIds()])]);
+  }
+  await finish(actor, recipe, a, st, CM.outcome(roll.total, a.dc), null);
 }
 
 /**
@@ -199,6 +218,13 @@ async function finish(actor, recipe, a, st, success, card) {
 
 /** @param {{ message: string, choice: string }} data */
 async function onDecide(data) {
+  const st0 = game.messages.get(data.message)?.flags?.[ID]?.craft;
+  if (!st0?.actor) return log("decide: not a craft card");
+  return serial(st0.actor, () => decideNow(data));
+}
+
+/** @param {{ message: string, choice: string }} data */
+async function decideNow(data) {
   const card = game.messages.get(data.message);
   const st = card?.flags?.[ID]?.craft;
   if (!st || st.state !== "pending") return log("decide: not a pending craft card");
@@ -209,7 +235,7 @@ async function onDecide(data) {
   if ("refuse" in d) { next.state = "refused"; await card.update({ content: cardView(next, { actor, recipe, reason: "The GM refused this craft: nothing was made or used." }), [`flags.${ID}.craft`]: next }); return; }
   if (!actor || !recipe) { next.state = "error"; await card.update({ content: cardView(next, { actor, recipe, reason: "The character or the recipe no longer exists." }), [`flags.${ID}.craft`]: next }); return; }
   const a = assessIn(context(actor), recipe, st.helpers);
-  if (!a.canCraft) { next.state = "error"; await card.update({ content: cardView(next, { actor, recipe, reason: a.problems.join(" ") }), [`flags.${ID}.craft`]: next }); return; }
+  if (!a.canCraft) { next.state = "refused"; await card.update({ content: cardView(next, { actor, recipe, reason: `Nothing was made or used up: ${a.problems.join(" ")}` }), [`flags.${ID}.craft`]: next }); return; }
   await finish(actor, recipe, a, next, d.success, card);
 }
 
