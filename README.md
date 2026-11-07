@@ -1,8 +1,8 @@
 # Wanderer's Guild
 
-Professions for dnd5e, built on tool proficiencies. A character has every profession whose tool they are proficient with (no limit), and a profession's rank follows the character's proficiency bonus, from +2 at level 1 to +6. The GM names the professions and the ranks; players see theirs in a Professions window. Characters learn recipes and craft them with the profession's tool check, on crafting rules the GM fills in.
+Professions for dnd5e, built on tool proficiencies. A character has every profession whose tool they are proficient with (no limit), and a profession's rank follows the character's proficiency bonus, from +2 at level 1 to +6. The GM names the professions and the ranks; players see theirs in a Professions window. Characters learn recipes and craft them with the profession's tool check, on crafting rules the GM fills in, and gather resources at nodes on the map, in a scene's area or from defeated creatures.
 
-A [Foundry VTT](https://foundryvtt.com) module (v13 and v14) for the dnd5e system (6.x). What changed in each version: [CHANGELOG](CHANGELOG.md). Version 0.2 adds recipes and crafting; gathering comes in a later version (its button is a placeholder for now).
+A [Foundry VTT](https://foundryvtt.com) module (v13 and v14) for the dnd5e system (6.x). What changed in each version: [CHANGELOG](CHANGELOG.md). Version 0.2 adds recipes and crafting, 0.3 gathering and a page on Wanderer's Toolkit's character sheet.
 
 ## Contents
 
@@ -36,6 +36,7 @@ In Foundry's **Add-on Modules › Install Module**, paste the manifest URL:
 3. On the **Professions** page press **Add starter set** (one plain profession per artisan's tool and the herbalism kit), or **Add profession** to make your own. Link each profession to one or more tools.
 4. Open a character's sheet and press the hammer button in its header: the **Professions** window lists what the character has, with the rank and the rank ladder.
 5. For crafting: fill in **Crafting rules** from your table's rules (nothing is filled in for you), add **Recipes** (drag the item each one makes onto the editor), then press **Craft** on a crafting profession's card. See [docs/crafting.md](docs/crafting.md).
+6. For gathering: give the tiers DCs on the **Gathering** page, a scene a tier (Scene configuration › Table Tools), place nodes (Journal Notes controls › Gathering node), then press **Gather** on a gathering profession's card. See [docs/gathering.md](docs/gathering.md).
 
 <!-- screenshot: the Professions window, two cards and the Other professions list -->
 
@@ -48,9 +49,12 @@ In Foundry's **Add-on Modules › Install Module**, paste the manifest URL:
 | Sheet button | owners, observers | The hammer button in the header of dnd5e character sheets. |
 | Toolkit sheet page | owners, observers | With [Wanderer's Toolkit](https://github.com/cocoomg11/wayfarers-toolkit) 2.3.0 or later and its character sheet on: a **Professions** bookmark on the toolkit's sheet, showing the same cards and buttons as the window. |
 | Crafting window | owners (observers look), GM | Per character and profession. **Craft**: recipes with materials have / need from the character's inventory, rank check, tool check and DC, time (for reference only: the calendar is never advanced), cost, and what the craft will use up; Craft rolls the tool check and the active GM's client uses up the materials (on a failure too, by default) and makes the item. **Recipes**: learn (players, when allowed), teach and forget (GM). |
+| Gather window | owners, GM | Per character and gathering profession: the node within reach, the scene's area, the targeted defeated creature; the check (skill or tool, the DC by node, tier or CR) and what it gives. Gather rolls the check; the active GM's client gives the items. |
+| Gathering nodes | GM places, everyone sees | Map notes with a resource, rare resource, tier or DC, uses; players double-click one (their token selected) to gather. Can be hidden from players. |
+| Gathering | GM | Setup window page: tiers and DCs, per success, rare margin, reach, area resources, harvesting rows and CR bands; Reset gathering limits; Import / export. |
 | Recipes, Crafting rules | GM | Setup window pages: the world's recipes, and every crafting number (empty until you fill them in), each with Import / export JSON. |
 
-How it works, in detail: [docs/professions.md](docs/professions.md) and [docs/crafting.md](docs/crafting.md).
+How it works, in detail: [docs/professions.md](docs/professions.md), [docs/crafting.md](docs/crafting.md) and [docs/gathering.md](docs/gathering.md).
 
 ## Settings
 
@@ -60,6 +64,7 @@ Feature switches (Game Settings › Wanderer's Guild; each reloads Foundry):
 | --- | --- | --- |
 | Feature: Professions | on | no windows, no setup menu, `api.open` / `api.setup` / `api.definitions` / `api.professionsOf` are undefined |
 | Feature: Sheet button | on | no header button on character sheets (also off when Professions is off) |
+| Feature: Gathering | on | no Gather buttons, window, nodes (control, look, double-click), scene tier field, Gathering page, gathering requests or journey listener; `api.gathering` is undefined (also off when Professions is off) |
 | Feature: Toolkit sheet page | on | no Professions page on Wanderer's Toolkit's character sheet (the window and header button stay) |
 | Feature: Crafting | on | no Craft or Recipes buttons, no Crafting window, no Recipes or Crafting rules pages, no crafting requests or chat card buttons; `api.crafting` is undefined (also off when Professions is off) |
 
@@ -71,6 +76,9 @@ On the setup window's **Settings** page (instant):
 | Players learn recipes themselves | on | A player can learn a recipe of their profession that their rank allows. Off: only a GM teaches. |
 | GM approves each craft | off | After the tool check a GM card with Approve / Refuse decides; nothing is made or used up until then. Off: the craft resolves when the roll lands and nothing waits for a GM (a craft with no DC succeeds on the roll). |
 | Prices in the world's coins | off | Prices in Wanderer's Toolkit's coins (when it is active), paid through the toolkit. Off: book values. |
+| One gather per node until reset | on | A character gathers once per node (and per scene's area) until the GM resets the limits or the party travels with Wanderer's Toolkit. |
+| Gather without a node | on | Gathering in a scene's area (its tier's DC) when no node is in reach. |
+| Travel resets gathering limits | on | A Wanderer's Toolkit journey (hex travel or a flight) resets the limits. |
 | Debug logging | off | Writes the module's decisions to the browser console. |
 
 ## Public API and hooks
@@ -85,8 +93,9 @@ On the setup window's **Settings** page (instant):
 | `setup(page?)` | experimental | Opens the GM setup window, on `"professions"`, `"ranks"`, `"recipes"`, `"crafting"`, `"settings"`, `"health"` or `"data"`. GM only. |
 | `definitions` | experimental | `{ professions(), ranks() }`: the world's definitions and rank table, normalized. |
 | `health({ timeoutMs }?)` | stable | Read-only report: `[{ title, lines: [{ level, text, fix? }] }]`, `level` is `ok`, `warn`, `bad`, `off` or `info`. GM only (players get `[]`). |
-| `cleanup` | stable | `{ plan(), dryRun(), remove(pick, "REMOVE") }`: counts what the module stored; removes the picked categories (`professions`, `ranks`, `recipes`, `rules`, `known`, `cards`, `settings`) after the word REMOVE (GM). |
+| `cleanup` | stable | `{ plan(), dryRun(), remove(pick, "REMOVE") }`: counts what the module stored; removes the picked categories (`professions`, `ranks`, `recipes`, `rules`, `known`, `gathering`, `nodes`, `gathered`, `harvested`, `cards`, `settings`) after the word REMOVE (GM). |
 | `crafting` | experimental | `{ open(actor, professionId, mode?), recipes(), rules(), known(actor), assess(actor, recipeId), learn(actor, recipeId), forget(actor, recipeId) }`: opens the Crafting window (`mode` `"craft"` or `"recipes"`); the world's recipes and crafting rules (normalized, read only); a character's known recipes and one recipe's assessment (what the window shows) when you can observe it; asks the active GM's client to learn (the same checks as the Learn button) or forget (GM) a recipe, returning whether the request was sent. Undefined when *Feature: Crafting* is off. |
+| `gathering` | experimental | `{ open(actor, professionId?), rules(), nodes(scene?), assess(actor, professionId, { note } \| { scene } \| { token }), place(), resetLimits() }`: opens the Gather window; the gathering rules (normalized); a scene's nodes (`[{ id, uuid, node }]`, hidden ones for GMs only); one gather's assessment (DC, problems, what it gives); GM: arm a click to place a node, reset every limit. Undefined when *Feature: Gathering* is off. |
 | `isReady` | stable | Whether our ready hook ran. |
 | `features` | experimental | The feature registry (`FEATURES`, `on(id)`, `list()`). |
 
@@ -95,6 +104,7 @@ On the setup window's **Settings** page (instant):
 **Hooks**
 
 - `wanderers-guild.ready` (stable): fired once, with the api, in our `ready` hook.
+- `wanderers-guild.gathered` (experimental): fired on the active GM's client after a gather check is resolved, ids only: `{ actorId, professionId, kind, success, rare, messageId }` (`kind` is `node`, `area` or `creature`). Not fired when the gather was refused.
 - `wanderers-guild.crafted` (experimental): fired on the active GM's client after a craft is decided, with ids only: `{ actorId, recipeId, success, messageId }` (the chat card). Not fired for refused crafts or errors.
 
 Stable members keep their name and shape within a major version; experimental ones may change in any release.
@@ -105,13 +115,14 @@ With the Wanderer's Satchel installed, the module registers itself there (Open =
 
 ## Data Wanderer's Guild writes
 
-- World settings under `wanderers-guild.*`: the feature switches, the switches above, `professionList` (the definitions, at most 100), `rankTable` (at most 12 rows), `recipeBook` (the recipes, at most 300) and `craftRules`. Every client reads these, so they hold nothing secret: notes on a profession or recipe are shown to players.
+- World settings under `wanderers-guild.*`: the feature switches, the switches above, `professionList` (the definitions, at most 100), `rankTable` (at most 12 rows), `recipeBook` (the recipes, at most 300), `craftRules`, `gatherRules` (at most 12 tiers, 12 CR bands, 60 harvesting rows, 100 area rows) and `gatherReset`. Every client reads these, so they hold nothing secret: notes on a profession or recipe are shown to players.
 - A client setting, `windowPlacement` (where this browser last left the windows).
 - On characters: `flags.wanderers-guild.recipes` (known recipe ids, at most 200), written only by the active GM's client. A character's professions are still worked out from its tool proficiencies each time.
+- Gathering: scenes' `flags.wanderers-guild.tier`; nodes are map notes with `flags.wanderers-guild.node`; characters' `flags.wanderers-guild.gathered` (at most 100 limit marks); creature tokens' `flags.wanderers-guild.harvested`; gather cards (`flags.wanderers-guild.gather`) and `gatherRoll` marks on rolls. Gathered items are added by the active GM's client.
 - Crafting changes the character's items (the crafted item, the materials used up) and coin, through the active GM's client.
 - Chat: craft cards and short notices (`flags.wanderers-guild.craft` / `.notice`) and a mark on tool check rolls used for a craft (`flags.wanderers-guild.craftRoll` / `.rollUsed`).
 
-Removing it: the setup window's **Data** page, or `api.cleanup` (a dry-run `plan()`, then `remove({ professions: true, ranks: true, recipes: true, rules: true, known: true, cards: true, settings: true }, "REMOVE")`). Crafted items stay: they are ordinary items.
+Removing it: the setup window's **Data** page, or `api.cleanup` (a dry-run `plan()`, then `remove({ professions: true, ranks: true, recipes: true, rules: true, known: true, gathering: true, nodes: true, gathered: true, harvested: true, cards: true, settings: true }, "REMOVE")`). Crafted and gathered items stay: they are ordinary items.
 
 ## Troubleshooting
 
@@ -121,6 +132,8 @@ Removing it: the setup window's **Data** page, or `api.cleanup` (a dry-run `plan
 - **Every craft succeeds.** No DC is set, so the roll crafts it: give the recipe a DC, or fill in a base DC or the rarity table on the Crafting rules page.
 - **Every craft waits for the GM.** *GM approves each craft* is on (setup › Settings); turn it off to resolve crafts on the roll.
 - **The time says "not set".** Fill in the time rules on the Crafting rules page (or the recipe's own time). The time is only shown; the calendar never moves.
+- **Gather is greyed out.** The line under the option says why: too far from the node (Reach), already gathered here, the node is used up, the creature isn't defeated or was harvested, or no GM is connected.
+- **Players don't see nodes.** Map notes must be shown in their browser (Journal Notes controls › Toggle notes), and the node must not be hidden.
 - **Something else.** Run the setup window's **Health** page and look for warnings.
 
 ## Development

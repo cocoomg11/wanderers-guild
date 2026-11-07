@@ -14,6 +14,7 @@ export const NAV = Object.freeze([
   { id: "ranks", label: "Ranks", icon: "fa-solid fa-stairs" },
   { id: "recipes", label: "Recipes", icon: "fa-solid fa-scroll", feature: "crafting" },
   { id: "crafting", label: "Crafting rules", icon: "fa-solid fa-scale-balanced", feature: "crafting" },
+  { id: "gathering", label: "Gathering", icon: "fa-solid fa-leaf", feature: "gathering" },
   { id: "settings", label: "Settings", icon: "fa-solid fa-sliders" },
   { id: "health", label: "Health", icon: "fa-solid fa-heart-pulse" },
   { id: "data", label: "Data", icon: "fa-solid fa-database" }
@@ -108,6 +109,7 @@ export function editorHTML(p, m) {
       <fieldset class="wg-fieldset"><legend>Linked tools (proficiency with any one of them)</legend><div class="wg-checks">${toolBoxes}${missing}</div>
         <p class="wc-hint">None ticked: everyone has this profession, no tool needed.</p></fieldset>
       <label class="wg-field"><span>Gathering check</span><select name="check">${m.skills.map(s => opt(s.key, s.label, s.key === check)).join("")}${m.skills.some(s => s.key === check) ? "" : opt(check, check, true)}</select></label>
+      <label class="wg-field"><span>Gathering rolls</span><select name="roll">${opt("skill", "The gathering check (skill)", p?.roll !== "tool")}${opt("tool", "The linked tool (best proficiency)", p?.roll === "tool")}</select></label>
       <fieldset class="wg-fieldset"><legend>Icon</legend><div class="wg-icons">${icons}</div></fieldset>
       <label class="wg-field wg-wide"><span>Note for players</span><textarea name="notes" rows="2" maxlength="${NOTES_MAX}">${esc(p?.notes ?? "")}</textarea></label>
     </div>
@@ -177,7 +179,7 @@ export function readProfessionForm(entries) {
   for (const [k, v] of entries) {
     const s = String(v ?? "");
     if (k === "tools" || k === "actions") o[k].push(s);
-    else if (["id", "name", "kind", "icon", "check", "notes"].includes(k)) o[k] = s;
+    else if (["id", "name", "kind", "icon", "check", "roll", "notes"].includes(k)) o[k] = s;
   }
   if (!o.id) delete o.id;
   return o;

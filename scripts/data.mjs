@@ -10,6 +10,7 @@ import * as RM from "./ranks-model.mjs";
 import * as D5 from "./dnd5e.mjs";
 import * as RC from "./recipes-model.mjs";
 import * as CM from "./craft-model.mjs";
+import * as GM from "./gather-model.mjs";
 import { ID } from "./const.mjs";
 
 const gm = () => { if (game.user?.isGM) return true; ui.notifications.warn(`${TITLE}: GM only.`); return false; };
@@ -61,5 +62,28 @@ export async function saveRecipes(book) {
 export async function saveRules(r) {
   if (!gm()) return false;
   await S.set("craftRules", CM.normalizeRules(r));
+  return true;
+}
+
+/** The gathering rules as stored (normalized). */
+export const gatherRules = () => GM.normalizeGatherRules(S.get("gatherRules"));
+/** When the gathering limits were last reset (ms; 0 = never). */
+export const gatherEpoch = () => GM.normalizeReset(S.get("gatherReset")).at;
+/** The node on a Note (normalized), or null. @param {any} note */
+export const nodeOf = note => GM.normalizeNode(note?.flags?.[ID]?.node);
+/** An actor's gathering limits (the flag, normalized). @param {any} actor */
+export const gathered = actor => GM.normalizeMarks(actor?.getFlag?.(ID, "gathered") ?? actor?.flags?.[ID]?.gathered);
+
+/** Saves the gathering rules. @param {unknown} r */
+export async function saveGatherRules(r) {
+  if (!gm()) return false;
+  await S.set("gatherRules", GM.normalizeGatherRules(r));
+  return true;
+}
+
+/** Resets every gathering limit (GM click, or the writing GM client after a journey): limits older than now stop counting. */
+export async function resetGatherLimits() {
+  if (!game.user?.isGM) return false;
+  await S.set("gatherReset", { v: 1, at: Date.now() });
   return true;
 }

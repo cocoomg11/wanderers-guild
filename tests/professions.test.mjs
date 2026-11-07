@@ -6,7 +6,9 @@ test("cleanProfession fills defaults and drops junk", () => {
   assert.equal(P.cleanProfession({ name: "  " }), null);
   assert.equal(P.cleanProfession(null), null);
   const p = P.cleanProfession({ name: "  Smithing  ", tools: ["smith", "smith", "bad key!", 3], kind: "weird", icon: "nope", notes: "  hi  " });
-  assert.deepEqual(p, { id: "smithing", name: "Smithing", kind: "crafting", tools: ["smith"], icon: "hammer", check: "sur", actions: ["craft", "recipes"], notes: "hi" });
+  assert.deepEqual(p, { id: "smithing", name: "Smithing", kind: "crafting", tools: ["smith"], icon: "hammer", check: "sur", roll: "skill", actions: ["craft", "recipes"], notes: "hi" });
+  assert.equal(P.cleanProfession({ name: "Mining", roll: "tool" }).roll, "tool");
+  assert.equal(P.cleanProfession({ name: "Mining", roll: "nonsense" }).roll, "skill");
   assert.deepEqual(P.cleanProfession({ name: "Herbs", kind: "gathering" }).actions, ["gather"]);
   assert.equal(P.cleanProfession({ name: "Herbs", kind: "gathering" }).icon, "pick");
   assert.deepEqual(P.cleanProfession({ name: "Odd", kind: "secondary" }).actions, []);

@@ -131,3 +131,29 @@ export function itemSnapshot(doc) {
   const price = sys.price && typeof sys.price === "object" ? { value: Number(sys.price.value) || 0, denomination: String(sys.price.denomination || "gp") } : null;
   return { uuid: String(doc?.uuid ?? ""), name: String(doc?.name ?? ""), img: String(doc?.img ?? ""), type: String(doc?.type ?? ""), rarity: String(sys.rarity ?? ""), price };
 }
+
+/** The world's creature types, sorted by label: [{ key, label }] (CONFIG.DND5E.creatureTypes). */
+export function creatureTypeChoices() {
+  return Object.entries(D().creatureTypes ?? {}).map(([key, t]) => ({ key, label: loc(/** @type {any} */ (t)?.label ?? t ?? key) }))
+    .sort((a, b) => a.label.localeCompare(b.label, game.i18n?.lang));
+}
+
+/** A skill key's label with its ability ("Wisdom (Survival)"), or the key. @param {string} key */
+export function skillCheckText(key) {
+  const s = D().skills?.[key]; if (!s) return key;
+  const ab = D().abilities?.[s.ability]?.label;
+  return ab ? `${loc(ab)} (${loc(s.label)})` : loc(s.label);
+}
+
+/**
+ * A creature's plain facts for harvesting (prepared data, read only): name, creature type key, CR, defeated (HP 0 or the dead
+ * status), whether it is an NPC.
+ * @param {any} actor
+ */
+export function creatureFacts(actor) {
+  const sys = actor?.system ?? {};
+  const hp = Number(sys.attributes?.hp?.value);
+  const cr = Number(sys.details?.cr);
+  const dead = (Number.isFinite(hp) && hp <= 0) || !!actor?.statuses?.has?.("dead");
+  return { name: String(actor?.name ?? ""), type: String(sys.details?.type?.value ?? ""), cr: Number.isFinite(cr) ? cr : null, dead, npc: actor?.type === "npc" };
+}

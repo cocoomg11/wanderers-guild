@@ -18,6 +18,8 @@ import * as D5 from "./dnd5e.mjs";
 import * as Data from "./data.mjs";
 import * as Health from "./health.mjs";
 import * as Cleanup from "./cleanup.mjs";
+import * as GM from "./gather-model.mjs";
+import * as GV from "./gather-view.mjs";
 
 /** @type {SetupApp | null} */
 let app = null;
@@ -52,6 +54,8 @@ export class SetupApp extends Base {
     this.recipeFilter = "";
     /** @type {any[] | null} */
     this.report = null;
+    /** @type {GM.GatherRules | null} unsaved gathering rules (rows added or removed, items dropped) */
+    this.gatherDraft = null;
   }
 
   async _renderHTML() {
@@ -85,6 +89,14 @@ export class SetupApp extends Base {
       const rules = Data.rules();
       return CV.rulesPage({ rules, rarities: this.#rarities(), ranks: Data.ranks().rows, status: CM.rulesStatus(rules), json: CM.exportRules(rules) });
     }
+    if (this.page === "gathering") {
+      const rules = this.gatherDraft ?? Data.gatherRules();
+      const professions = Data.professions().list.filter(p => p.actions.includes("gather")).map(p => ({ key: p.id, label: p.name }));
+      /** @type {Map<string, number>} */ const counts = new Map();
+      for (const sc of game.scenes ?? []) for (const n of sc.notes ?? []) if (Data.nodeOf(n)) counts.set(sc.name, (counts.get(sc.name) ?? 0) + 1);
+      const at = Data.gatherEpoch();
+      return GV.gatherPage({ rules, professions, types: D5.creatureTypeChoices(), status: GM.gatherStatus(rules), json: GM.exportGatherRules(rules), nodes: [...counts].map(([scene, count]) => ({ scene, count })), epoch: at ? new Date(at).toLocaleString(game.i18n?.lang) : "" });
+    }
     if (this.page === "settings") {
       const rows = S.ROWS.filter(r => r.tab === "settings" && r.type === "bool" && (!r.feature || F.on(r.feature))).map(r => ({ key: r.key, label: r.label ?? r.key, hint: r.hint ?? "", value: !!S.get(r.key) }));
       return V.settingsPage({ rows });
@@ -107,6 +119,7 @@ export class SetupApp extends Base {
     for (const box of content.querySelectorAll("input[data-setting]")) box.addEventListener("change", () => this.#setting(/** @type {HTMLInputElement} */ (box)));
     // Rank and recipe edits are kept as drafts so Add / Remove (and drops) don't lose typed values.
     content.querySelector("form[data-form=ranks]")?.addEventListener("input", ev => { this.rankDraft = this.#rankRows(/** @type {HTMLFormElement} */ (/** @type {HTMLElement} */ (ev.target).closest("form"))); });
+    content.querySelector("form[data-form=gather]")?.addEventListener("input", ev => { this.gatherDraft = this.#gatherRules(/** @type {HTMLFormElement} */ (/** @type {HTMLElement} */ (ev.target).closest("form"))); });
     const recipeForm = /** @type {HTMLFormElement | null} */ (content.querySelector("form[data-form=recipe]"));
     recipeForm?.addEventListener("input", () => { this.recipeDraft = this.#recipeDraft(recipeForm); });
     const filter = /** @type {HTMLSelectElement | null} */ (content.querySelector("[data-wg-recfilter]"));
@@ -173,10 +186,44 @@ export class SetupApp extends Base {
       if (!await confirm("Clear the crafting rules?", "Every field goes back to not set.")) return;
       await Data.saveRules(CM.defaultRules()); return this.render();
     }
-    if (a === "ioDownload") return this.#download(target.dataset.kind === "rules" ? "rules" : "recipes");
-    if (a === "ioImport") return this.#import(target.dataset.kind === "rules" ? "rules" : "recipes");
+    if (a === "gRowAdd" || a === "gRowRemove") return this.#gatherRow(a, String(target.dataset.list ?? ""), Number(target.dataset.index));
+    if (a === "gatherReset") {
+      if (!await confirm("Reset gathering limits?", "Every character may gather again at every node and in every scene (node uses are not refilled).")) return;
+      await Data.resetGatherLimits(); ui.notifications.info(`${TITLE}: gathering limits reset.`); return this.render();
+    }
+    if (a === "ioDownload") return this.#download(/** @type {any} */ (["rules", "gather"].includes(String(target.dataset.kind)) ? target.dataset.kind : "recipes"));
+    if (a === "ioImport") return this.#import(/** @type {any} */ (["rules", "gather"].includes(String(target.dataset.kind)) ? target.dataset.kind : "recipes"));
     if (a === "healthRun") { this.report = null; return this.render(); }
     if (a === "resetWindows") { await resetPlacement(ID); ui.notifications.info(`${TITLE}: window positions reset (open windows move when reopened).`); }
+  }
+
+  /** The Gathering page's rules as on screen (normalized; rows without a profession or type are dropped). @param {HTMLFormElement | null} form */
+  #gatherRules(form) {
+    return form ? GM.normalizeGatherRules(GV.readGatherForm(new FormData(form).entries())) : (this.gatherDraft ?? Data.gatherRules());
+  }
+
+  /** Adds or removes a row on the Gathering page (kept as a draft until Save). @param {string} a @param {string} list @param {number} index */
+  #gatherRow(a, list, index) {
+    const form = /** @type {HTMLFormElement | null} */ (this.element?.querySelector("form[data-form=gather]"));
+    const r = /** @type {any} */ (this.#gatherRules(form));
+    if (!["tiers", "crBands", "creatures", "areas"].includes(list)) return;
+    if (a === "gRowRemove") r[list].splice(index, 1);
+    else if (list === "tiers") { const ids = new Set(r.tiers.map((/** @type {any} */ t) => t.id)); let n = r.tiers.length + 1; while (ids.has(`t${n}`)) n++; r.tiers.push({ id: `t${n}`, name: `Tier ${n}`, dc: null }); }
+    else if (list === "crBands") { const top = Math.max(0, ...r.crBands.map((/** @type {any} */ b) => b.cr)); r.crBands.push({ cr: Math.min(GM.CR_MAX, top + 1), dc: null }); }
+    else {
+      const prof = Data.professions().list.find(p => p.actions.includes("gather"))?.id;
+      if (!prof) { ui.notifications.warn(`${TITLE}: add a profession with the Gather action first.`); return; }
+      if (list === "creatures") {
+        const types = D5.creatureTypeChoices().map(t => t.key);
+        const type = types.find(t => !r.creatures.some((/** @type {any} */ c) => c.type === t && c.profession === prof)) ?? types[0] ?? "beast";
+        r.creatures.push({ type, profession: prof, item: null, rare: null, minBonus: null });
+      } else {
+        const tier = [{ id: "" }, ...r.tiers].map((/** @type {any} */ t) => t.id).find((/** @type {string} */ t) => !r.areas.some((/** @type {any} */ x) => x.profession === prof && x.tier === t)) ?? "";
+        r.areas.push({ profession: prof, tier, item: null, rare: null });
+      }
+    }
+    this.gatherDraft = GM.normalizeGatherRules(r);
+    this.render();
   }
 
   /** The rank rows as on screen (the draft, else the stored table). */
@@ -203,10 +250,20 @@ export class SetupApp extends Base {
     return d;
   }
 
-  /** An item dropped on the recipe editor. @param {DragEvent} ev @param {string} where */
+  /** An item dropped on the recipe editor or a Gathering page row. @param {DragEvent} ev @param {string} where */
   async #drop(ev, where) {
     let data; try { data = JSON.parse(ev.dataTransfer?.getData("text/plain") ?? ""); } catch { return; }
     if (data?.type !== "Item" || typeof data.uuid !== "string") { ui.notifications.warn(`${TITLE}: drop an item.`); return; }
+    const gm = /^(cre|area)\.(\d{1,3})\.(item|rare)$/.exec(where);
+    if (gm) {
+      const form = /** @type {HTMLFormElement | null} */ (this.element?.querySelector("form[data-form=gather]")); if (!form) return;
+      const doc = await fromUuid(data.uuid).catch(() => null);
+      if (!doc || doc.documentName !== "Item") { ui.notifications.warn(`${TITLE}: that item can't be read.`); return; }
+      const r = this.#gatherRules(form);
+      const row = /** @type {any} */ ((gm[1] === "cre" ? r.creatures : r.areas)[Number(gm[2])]);
+      if (row) row[gm[3]] = { uuid: doc.uuid, name: doc.name, img: doc.img };
+      this.gatherDraft = r; this.render(); return;
+    }
     const form = /** @type {HTMLFormElement | null} */ (this.element?.querySelector("form[data-form=recipe]")); if (!form) return;
     const doc = await fromUuid(data.uuid).catch(() => null);
     if (!doc || doc.documentName !== "Item") { ui.notifications.warn(`${TITLE}: that item can't be read.`); return; }
@@ -253,16 +310,22 @@ export class SetupApp extends Base {
     this.render();
   }
 
-  /** @param {"recipes" | "rules"} kind */
+  /** @param {"recipes" | "rules" | "gather"} kind */
   #download(kind) {
-    const text = kind === "rules" ? CM.exportRules(Data.rules()) : RC.exportRecipes(Data.recipes());
+    const text = kind === "rules" ? CM.exportRules(Data.rules()) : kind === "gather" ? GM.exportGatherRules(Data.gatherRules()) : RC.exportRecipes(Data.recipes());
     const world = String(game.world?.id ?? "world").replace(/[^A-Za-z0-9_-]/g, "");
-    foundry.utils.saveDataToFile(text, "application/json", `${ID}-${kind === "rules" ? "crafting-rules" : "recipes"}-${world}.json`);
+    foundry.utils.saveDataToFile(text, "application/json", `${ID}-${kind === "rules" ? "crafting-rules" : kind === "gather" ? "gathering-rules" : "recipes"}-${world}.json`);
   }
 
-  /** @param {"recipes" | "rules"} kind */
+  /** @param {"recipes" | "rules" | "gather"} kind */
   async #import(kind) {
     const box = /** @type {HTMLTextAreaElement | null} */ (this.element?.querySelector(`[data-wg-io="${kind}"]`)); if (!box) return;
+    if (kind === "gather") {
+      const r = GM.readGatherImport(box.value);
+      if (!r.ok) { ui.notifications.warn(`${TITLE}: ${r.error}`); return; }
+      if (!await confirm("Replace the gathering rules?", "The pasted rules replace every field on this page.")) return;
+      await Data.saveGatherRules(r.rules); this.gatherDraft = null; ui.notifications.info(`${TITLE}: gathering rules imported.`); return this.render();
+    }
     if (kind === "rules") {
       const r = CM.readRulesImport(box.value);
       if (!r.ok || !r.rules) { ui.notifications.warn(`${TITLE}: ${r.error}`); return; }
@@ -303,11 +366,17 @@ export class SetupApp extends Base {
       await Data.saveRules(CV.readRulesForm(new FormData(form).entries()));
       ui.notifications.info(`${TITLE}: crafting rules saved.`);
       this.render();
+    } else if (kind === "gather") {
+      const before = this.#gatherRules(form);
+      await Data.saveGatherRules(before);
+      this.gatherDraft = null;
+      ui.notifications.info(`${TITLE}: gathering rules saved.`);
+      this.render();
     } else if (kind === "cleanup") {
       const fd = new FormData(form);
       const pick = Object.fromEntries(fd.getAll("pick").map(k => [String(k), true]));
       const done = await Cleanup.remove(pick, String(fd.get("word") ?? ""));
-      if (done) { ui.notifications.info(`${TITLE}: removed ${Cleanup.describe(done)}.`); this.editing = null; this.rankDraft = null; this.recipeEditing = null; this.recipeDraft = null; this.render(); }
+      if (done) { ui.notifications.info(`${TITLE}: removed ${Cleanup.describe(done)}.`); this.editing = null; this.rankDraft = null; this.recipeEditing = null; this.recipeDraft = null; this.gatherDraft = null; this.render(); }
     }
   }
 

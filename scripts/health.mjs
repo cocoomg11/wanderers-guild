@@ -14,6 +14,8 @@ import * as Data from "./data.mjs";
 import * as RC from "./recipes-model.mjs";
 import * as CM from "./craft-model.mjs";
 import * as SheetPage from "./sheet-page.mjs";
+import * as GMo from "./gather-model.mjs";
+import * as Gathering from "./gathering.mjs";
 import { pageStatus } from "./sheet-page-model.mjs";
 
 /** Clamp for the caller's per-check budget (the Satchel passes its own). @param {unknown} ms */
@@ -88,6 +90,32 @@ export function run(opts = {}) {
       const tk = game.modules.get(TOOLKIT_ID);
       if (S.get("worldCoins") && !tk?.active) add("warn", "Prices in the world's coins is on, but Wanderer's Toolkit isn't active: prices show book values.");
       else add("info", S.get("worldCoins") ? "Prices: the world's coins (Wanderer's Toolkit)." : "Prices: book values.");
+    });
+  }
+  if (F.on("gathering")) {
+    h.section("Gathering");
+    h.check(add => {
+      const gp = Data.professions().list.filter(p => p.actions.includes("gather"));
+      if (!gp.length) add("warn", "No profession has the Gather action, so nobody can gather (setup › Professions: tick Gather).");
+      else add("ok", `Gathering professions: ${gp.map(p => `${p.name} (${p.roll === "tool" ? "rolls its tool" : D5.skillCheckText(p.check)})`).join(", ")}.`);
+      const noTool = gp.filter(p => p.roll === "tool" && !p.tools.length);
+      if (noTool.length) add("warn", `${noTool.map(p => p.name).join(", ")} rolls its tool but links none.`);
+    });
+    h.check(add => {
+      const r = Data.gatherRules(); const st = GMo.gatherStatus(r);
+      if (st.set.length) add("ok", `Gathering rules set: ${st.set.join(", ")}.`);
+      if (st.unset.length) add("info", `Gathering rules not set (setup › Gathering): ${st.unset.join(", ")}. A gather with no DC succeeds on the roll.`);
+      const s = Gathering.status();
+      add(s.nodes.length ? "ok" : "info", s.nodes.length ? `${plural(s.nodes.length, "gathering node")} on ${plural(new Set(s.nodes.map(n => n.scene)).size, "scene")}${s.nodes.some(n => n.node.hidden) ? ` (${s.nodes.filter(n => n.node.hidden).length} hidden)` : ""}.` : "No gathering nodes yet (Journal Notes controls › Gathering node).");
+      add("info", s.tiers.length ? `Scenes with a tier: ${s.tiers.slice(0, 8).join(", ")}${s.tiers.length > 8 ? ", …" : ""}.` : "No scene has a gathering tier (Scene configuration › Table Tools).");
+      for (const w of GMo.gatherWarnings(r, Data.professions().list.map(p => p.id), s.nodes)) add("warn", w);
+      if (!s.classOk) add("warn", "Another module replaced the map note class after us: nodes may show and open like plain notes.");
+    });
+    h.check(add => {
+      add("info", S.get("gatherOnce") ? "One gather per node (and per scene) until the limits reset." : "No per-character gathering limit (only node uses).");
+      const at = Data.gatherEpoch(); add("info", at ? `Gathering limits last reset ${new Date(at).toLocaleString()}.` : "Gathering limits never reset.");
+      const tk = game.modules.get(TOOLKIT_ID)?.active;
+      if (S.get("gatherJourney")) add("info", tk ? "A Wanderer's Toolkit journey resets the gathering limits." : "Travel resets gathering limits is on, but Wanderer's Toolkit isn't active (reset by hand on the Gathering page).");
     });
   }
   h.section("Optional modules");

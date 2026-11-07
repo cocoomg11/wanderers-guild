@@ -10,6 +10,7 @@ import { PROFESSIONS_VERSION } from "./professions-model.mjs";
 import { defaultRanks } from "./ranks-model.mjs";
 import { RECIPES_VERSION } from "./recipes-model.mjs";
 import { defaultRules, CHOICES, HELPERS_MAX } from "./craft-model.mjs";
+import { defaultGatherRules } from "./gather-model.mjs";
 
 /**
  * Features: one world setting per tool (`feature-<id>`, reload). A turned-off tool registers nothing (no hooks, buttons, key
@@ -19,6 +20,7 @@ export const F = createFeatures(ID, [
   { id: "professions", label: "Professions", hint: "A Professions window per character: professions from the character's tool proficiencies, rank from the proficiency bonus. The GM setup window and api.open(actor)." },
   { id: "sheetButton", label: "Sheet button", hint: "A Professions button in the header of dnd5e character sheets (owners and observers).", needs: ["professions"] },
   { id: "crafting", label: "Crafting", hint: "Recipes and the Crafting window: the Craft and Recipes buttons roll the linked tool check, and the active GM's client makes the item and uses up the materials.", needs: ["professions"] },
+  { id: "gathering", label: "Gathering", hint: "Gathering nodes on the map, scene tiers and harvesting defeated creatures: the Gather button rolls the profession's check, and the active GM's client gives the resources.", needs: ["professions"] },
   { id: "toolkitPage", label: "Toolkit sheet page", hint: "A Professions page (bookmark) on Wanderer's Toolkit's character sheet, when the toolkit (2.3.0 or later) is active with its sheet on. The Professions window stays.", needs: ["professions"] }
 ], { title: TITLE, where: "Game Settings" });
 
@@ -40,6 +42,11 @@ export const S = createSettings(ID, [
   { key: "playersLearn", type: "bool", default: true, label: "Players learn recipes themselves", hint: "A player can learn a recipe of their profession that their rank allows (the Recipes page's Learn button). Off: only a GM teaches recipes.", tab: "settings", feature: "crafting", onChange: fire },
   { key: "craftApproval", type: "bool", default: false, label: "GM approves each craft", hint: "After the tool check, a GM card with Approve and Refuse buttons decides; nothing is made or used up until then. Off (default): the craft resolves when the roll lands, nothing waits for a GM, and a craft with no DC succeeds on the roll.", tab: "settings", feature: "crafting", onChange: fire },
   { key: "worldCoins", type: "bool", default: false, label: "Prices in the world's coins (Wanderer's Toolkit)", hint: "Show and charge crafting prices in the world's own coins (the toolkit's three-coin economy, when it is active). Off: book values (standard gold, silver and copper).", tab: "settings", feature: "crafting", onChange: fire },
+  { key: "gatherRules", type: "object", default: defaultGatherRules(), hidden: true, onChange: fire },
+  { key: "gatherReset", type: "object", default: { v: 1, at: 0 }, hidden: true, onChange: fire },
+  { key: "gatherOnce", type: "bool", default: true, label: "One gather per node until reset", hint: "A character gathers once at each node (and once per scene without a node) until the GM presses Reset gathering limits, or the party travels on with Wanderer's Toolkit. Off: no limit but the node's uses.", tab: "settings", feature: "gathering", onChange: fire },
+  { key: "gatherArea", type: "bool", default: true, label: "Gather without a node", hint: "A character can gather in a scene's area (its tier's DC) when no node is near. Off: only at nodes.", tab: "settings", feature: "gathering", onChange: fire },
+  { key: "gatherJourney", type: "bool", default: true, label: "Travel resets gathering limits", hint: "When Wanderer's Toolkit reports a journey (hex travel or a flight), the gathering limits reset, as at a new journey stage.", tab: "settings", feature: "gathering", onChange: fire },
   { key: "debugLog", type: "bool", default: false, label: "Debug logging", hint: "Write the module's decisions to the browser console.", tab: "settings" }
 ], { reserved: F.FEATURES.map(f => f.key) });
 
@@ -60,12 +67,18 @@ const ACTOR = { type: /** @type {const} */ ("uuid"), max: 300 };
  * - `craft` { actor, recipe, roll, helpers }: the owner (or a GM) after rolling the tool check; `roll` is the roll's chat message,
  *   which the leader reads (author, actor, our flag, age, not used before) instead of trusting a total.
  * - `craftDecide` { message, choice }: GM only; a choice on a pending craft card.
+ * - `gather` { actor, profession, roll, node? | scene? | token? }: the owner (or a GM) after rolling the gathering check; exactly one
+ *   of node (a Note's UUID), scene (gather in that scene's area) or token (harvest that creature). The leader reads the roll's
+ *   message as for crafting and re-checks everything (gather-model.mjs `assessGather`).
+ * - `gatherReset` {}: GM only; a non-writing GM client relays a toolkit journey (the limits reset).
  */
 export const REQUESTS = defineRequests({
   learnRecipe: { fields: { actor: ACTOR, recipe: RECIPE_ID } },
   forgetRecipe: { fields: { actor: ACTOR, recipe: RECIPE_ID }, from: "gm" },
   craft: { fields: { actor: ACTOR, recipe: RECIPE_ID, roll: { type: "id" }, helpers: { type: "number", int: true, min: 0, max: HELPERS_MAX } } },
-  craftDecide: { fields: { message: { type: "id" }, choice: { type: "string", oneOf: CHOICES } }, from: "gm" }
+  craftDecide: { fields: { message: { type: "id" }, choice: { type: "string", oneOf: CHOICES } }, from: "gm" },
+  gather: { fields: { actor: ACTOR, profession: RECIPE_ID, roll: { type: "id" }, node: { ...ACTOR, optional: true }, scene: { type: "id", optional: true }, token: { ...ACTOR, optional: true } } },
+  gatherReset: { fields: {}, from: "gm" }
 });
 
 /** `module.json` has `"socket": true`. Automatic writes run only when `leader.isLeader()`. */

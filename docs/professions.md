@@ -1,6 +1,6 @@
 # Professions
 
-How Wanderer's Guild decides what a character can do, and how the GM sets it up. Version 0.2 adds recipes and crafting ([crafting.md](crafting.md)); gathering is a later version.
+How Wanderer's Guild decides what a character can do, and how the GM sets it up. Version 0.2 adds recipes and crafting ([crafting.md](crafting.md)); 0.3 adds gathering ([gathering.md](gathering.md)).
 
 ## Professions come from tool proficiencies
 
@@ -31,10 +31,10 @@ Crafting uses the rarity: a recipe whose item is of a higher rarity needs a high
 ## Kinds
 
 - **Crafting**: shown as a card with Craft and Recipes buttons (they open the Crafting window; *Feature: Crafting*).
-- **Gathering**: shown as a card with a Gather button and the check it uses (Survival by default; pick another skill in the editor). The DC will come from the GM per region in a later version.
+- **Gathering**: shown as a card with a Gather button and the check it uses (Survival by default; pick another skill in the editor, or *Gathering rolls: the linked tool*). The DC comes from the node, the scene's tier or the creature's CR, all set by the GM: see [gathering.md](gathering.md).
 - **Secondary**: shown in the *Other professions* list; tick which actions it offers.
 
-Gather says "Coming in a later version" for now.
+Gather opens the Gather window (with *Feature: Gathering* on; off, there is no Gather button).
 
 ## Setting up (GM)
 

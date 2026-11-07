@@ -70,7 +70,7 @@ export const ACTION_ICONS = Object.freeze({ craft: ICONS.hammer.d, recipes: ICON
 /**
  * @typedef {"crafting" | "gathering" | "secondary"} Kind
  * @typedef {"craft" | "recipes" | "gather"} Action
- * @typedef {{ id: string, name: string, kind: Kind, tools: string[], icon: string, check: string, actions: Action[], notes: string }} Profession
+ * @typedef {{ id: string, name: string, kind: Kind, tools: string[], icon: string, check: string, roll: "skill" | "tool", actions: Action[], notes: string }} Profession
  * @typedef {{ v: number, list: Profession[] }} ProfessionList
  */
 
@@ -106,12 +106,14 @@ export function cleanProfession(raw) {
   const tools = [...new Set((Array.isArray(o.tools) ? o.tools : []).map(String).filter(k => KEY_RE.test(k)))].slice(0, TOOLS_MAX);
   const icon = ICON_KEYS.includes(o.icon) ? o.icon : kind === "gathering" ? "pick" : "hammer";
   const check = KEY_RE.test(String(o.check ?? "")) ? String(o.check) : DEFAULT_CHECK;
+  // 0.3: what a gathering check rolls: the skill above (default) or the best linked tool.
+  const roll = o.roll === "tool" ? "tool" : "skill";
   const actions = /** @type {Action[]} */ (Array.isArray(o.actions)
     ? ACTION_KEYS.filter(a => o.actions.includes(a))
     : [...KIND_ACTIONS[kind]]);
   const notes = String(o.notes ?? "").replace(/\r\n?/g, "\n").trim().slice(0, NOTES_MAX);
   const id = ID_RE.test(String(o.id ?? "")) ? String(o.id) : idFrom(name);
-  return { id, name, kind, tools, icon, check, actions, notes };
+  return { id, name, kind, tools, icon, check, roll, actions, notes };
 }
 
 /**

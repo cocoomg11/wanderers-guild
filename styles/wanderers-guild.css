@@ -180,3 +180,23 @@
 .wg-prof.wg-page .wg-body { overflow: visible; padding: 8px 4px; }
 .wg-prof.wg-page .wg-pagesub { padding: 6px 8px 0; }
 .wg-prof.wg-page .wg-grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+
+/* ---------------------------------------------------------------- Gathering (0.3.0): the Gather window, the node editor, the card */
+.wg-gather-window .window-content { padding: 0; }
+.wg-gather .wg-gprof { display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: var(--wg-ink3); }
+.wg-gather .wg-gprof select { color: var(--wg-ink); background: rgba(0, 0, 0, 0.45); border: 1px solid var(--wg-edge); border-radius: 4px; }
+.wg-gather .wg-banner { margin: 0; padding: 6px 14px; font-size: 12px; color: #1b1300; background: var(--wg-gold); }
+.wg-gather .wg-glist { border: 1px solid var(--wg-edge); border-radius: 4px; background: rgba(0, 0, 0, 0.25); }
+.wg-gather .wg-gopt { display: flex; gap: 10px; align-items: center; padding: 8px 10px; border-bottom: 1px solid rgba(255, 255, 255, 0.05); }
+.wg-gather .wg-gopt:last-child { border-bottom: none; }
+.wg-gather .wg-gopt .wg-grow { display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+.wg-gather .wg-gopt.wg-off { opacity: 0.8; }
+.wg-gather .wg-gprob { font-size: 12px; color: #ff8f7f; }
+.wg-gather .wg-gbtn:disabled { opacity: 0.5; cursor: not-allowed; }
+.wg-node-dialog .wg-node-form { display: flex; flex-direction: column; gap: 0.45rem; min-width: 420px; }
+.wg-node-dialog .wg-field { display: grid; grid-template-columns: 8rem minmax(0, 1fr); gap: 0.5rem; align-items: center; }
+.wg-node-dialog .wg-num { width: 4.5rem; }
+.wg-node-dialog .wg-refbox { display: flex; flex-direction: column; gap: 2px; border-radius: 4px; }
+.wg-node-dialog .wg-refbox.wg-over { outline: 2px dashed var(--wc-accent, #c9a64a); }
+.wg-setup-window .wg-refbox input[type="text"] { min-width: 9rem; }
+.wg-setup-window .wg-refbox.wg-over { outline: 2px dashed var(--wc-accent); }

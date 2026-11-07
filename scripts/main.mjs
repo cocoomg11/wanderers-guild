@@ -14,6 +14,11 @@ import * as D5 from "./dnd5e.mjs";
 import * as Crafting from "./crafting.mjs";
 import * as CraftLeader from "./craft-leader.mjs";
 import * as SheetPage from "./sheet-page.mjs";
+import * as Gathering from "./gathering.mjs";
+import * as GatherLeader from "./gather-leader.mjs";
+import * as Nodes from "./nodes.mjs";
+import { gatherFacts } from "./gather-read.mjs";
+import { assessGather } from "./gather-model.mjs";
 import { context, assessIn } from "./craft-read.mjs";
 import { registration, registerWith, SATCHEL_ID } from "./satchel-model.mjs";
 
@@ -55,6 +60,25 @@ export const API = {
       forget: (/** @type {any} */ actor, /** @type {string} */ recipeId) => { const a = actorOf(actor); return gm() && !!a && leader.request("forgetRecipe", { actor: a.uuid, recipe: recipeId }); }
     };
   },
+  /**
+   * Gathering (experimental): open the Gather window, read the gathering rules and a scene's nodes, assess one gather, and (GM) place
+   * a node or reset the limits. Undefined when the Gathering feature is off.
+   */
+  get gathering() {
+    if (!F.on("gathering")) return undefined;
+    const actorOf = (/** @type {any} */ a) => (typeof a === "string" ? game.actors?.get(a) ?? fromUuidSync(a) : a);
+    return {
+      open: (/** @type {any} */ actor, /** @type {string | undefined} */ professionId) => Gathering.open(actor, professionId),
+      rules: () => Data.gatherRules(),
+      nodes: (/** @type {any} */ scene) => { const s = scene ?? canvas?.scene; return (s?.notes ?? []).map((/** @type {any} */ n) => ({ id: n.id, uuid: n.uuid, node: Data.nodeOf(n) })).filter((/** @type {any} */ n) => n.node && (game.user?.isGM || !n.node.hidden)); },
+      assess: (/** @type {any} */ actor, /** @type {string} */ professionId, /** @type {{ note?: any, scene?: any, token?: any }} */ target) => {
+        const a = actorOf(actor); if (!a || !Professions.canView(a) || !target) return undefined;
+        return assessGather(gatherFacts(a, professionId, target, { isGM: !!game.user?.isGM }));
+      },
+      place: () => (gm() ? Nodes.arm() : undefined),
+      resetLimits: () => (gm() ? Data.resetGatherLimits() : undefined)
+    };
+  },
   get isReady() { return isReady; },
   features: F
 };
@@ -77,11 +101,17 @@ Hooks.once("init", () => {
     Crafting.registerHooks();
     CraftLeader.registerCardHook();
   }
+  if (F.on("gathering")) {
+    Professions.setGatherOpener((actor, professionId) => Gathering.open(actor, professionId));
+    Gathering.init();
+    GatherLeader.registerJourneyHook();
+  }
 });
 
 Hooks.once("ready", () => {
   isReady = true;
   if (F.on("crafting")) CraftLeader.registerHandlers();
+  if (F.on("gathering")) GatherLeader.registerHandlers();
   if (F.on("toolkitPage")) SheetPage.ready();
   leader.start();
   if (!D5.isDnd5e() && game.user?.isGM) ui.notifications.warn(`${TITLE} needs the dnd5e system; this world runs ${game.system?.id}.`);
