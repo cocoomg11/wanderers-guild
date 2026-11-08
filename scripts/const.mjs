@@ -7,7 +7,7 @@ export { esc, plural } from "../vendor/wanderers-core/index.mjs";
 export const ID = "wanderers-guild";
 export const TITLE = "Wanderer's Guild";
 /** Hooks we fire (see README, Public API and hooks). */
-export const HOOKS = { ready: `${ID}.ready`, crafted: `${ID}.crafted`, gathered: `${ID}.gathered` };
+export const HOOKS = { ready: `${ID}.ready`, crafted: `${ID}.crafted`, gathered: `${ID}.gathered`, learned: `${ID}.learned` };
 /** Optional modules we read through their public API (never required). */
 export const TOOLKIT_ID = "wayfarers-toolkit";
 export const SYSTEM_ID = "dnd5e";

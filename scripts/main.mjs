@@ -19,7 +19,9 @@ import * as GatherLeader from "./gather-leader.mjs";
 import * as Nodes from "./nodes.mjs";
 import { gatherFacts } from "./gather-read.mjs";
 import { assessGather } from "./gather-model.mjs";
-import { context, assessIn } from "./craft-read.mjs";
+import { context, assessIn, recipeItems, learnFacts } from "./craft-read.mjs";
+import { recipeItemRows } from "./learn-model.mjs";
+import * as LearnGM from "./learn-gm.mjs";
 import { registration, registerWith, SATCHEL_ID } from "./satchel-model.mjs";
 
 let isReady = false;
@@ -57,7 +59,11 @@ export const API = {
         return r ? assessIn(ctx, r) : undefined;
       },
       learn: (/** @type {any} */ actor, /** @type {string} */ recipeId) => { const a = actorOf(actor); return !!a && leader.request("learnRecipe", { actor: a.uuid, recipe: recipeId }); },
-      forget: (/** @type {any} */ actor, /** @type {string} */ recipeId) => { const a = actorOf(actor); return gm() && !!a && leader.request("forgetRecipe", { actor: a.uuid, recipe: recipeId }); }
+      forget: (/** @type {any} */ actor, /** @type {string} */ recipeId) => { const a = actorOf(actor); return gm() && !!a && leader.request("forgetRecipe", { actor: a.uuid, recipe: recipeId }); },
+      learnFromItem: (/** @type {any} */ actor, /** @type {any} */ item) => { const a = actorOf(actor); const uuid = typeof item === "string" ? item : item?.uuid; return !!a && !!uuid && Crafting.learnFromItem(a, uuid); },
+      recipeItems: (/** @type {any} */ actor) => { const a = actorOf(actor); return a && Professions.canView(a) ? recipeItemRows(recipeItems(a), Data.recipes().list, learnFacts(a, game.user)) : undefined; },
+      teachTo: (/** @type {string} */ recipeId, /** @type {any[]} */ actors) => (gm() ? LearnGM.teachTo(recipeId, (actors ?? []).map(actorOf).filter(Boolean)) : undefined),
+      makeRecipeItem: (/** @type {string} */ recipeId) => (gm() ? LearnGM.makeRecipeItem(recipeId) : undefined)
     };
   },
   /**
@@ -98,6 +104,7 @@ Hooks.once("init", () => {
   if (F.on("sheetButton")) Professions.registerSheetButton();
   if (F.on("crafting")) {
     Professions.setCraftingOpener((actor, professionId, mode) => Crafting.open(actor, professionId, mode));
+    Professions.setRecipeItems({ rows: actor => recipeItemRows(recipeItems(actor), Data.recipes().list, learnFacts(actor, game.user)), learn: (actor, item) => Crafting.learnFromItem(actor, item) });
     Crafting.registerHooks();
     CraftLeader.registerCardHook();
   }

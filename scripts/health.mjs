@@ -17,6 +17,7 @@ import * as SheetPage from "./sheet-page.mjs";
 import * as GMo from "./gather-model.mjs";
 import * as Gathering from "./gathering.mjs";
 import { pageStatus } from "./sheet-page-model.mjs";
+import { recipeItemLines } from "./learn-model.mjs";
 
 /** Clamp for the caller's per-check budget (the Satchel passes its own). @param {unknown} ms */
 export const timeoutOf = ms => Math.min(300000, Math.max(1000, Number(ms) || 20000));
@@ -76,6 +77,15 @@ export function run(opts = {}) {
       const found = (/** @type {string} */ u) => { try { return !!fromUuidSync(u); } catch { return true; } };
       const gone = Data.recipes().list.filter(r => r.result.uuid && !found(r.result.uuid)).map(r => r.name);
       if (gone.length) add("warn", `Result item not found for: ${gone.slice(0, 6).join(", ")}${gone.length > 6 ? ", …" : ""} (deleted, or its compendium is gone).`);
+    });
+    h.check(add => {
+      // Recipe items: world items and characters' carried copies with our `teaches` flag (no document loads).
+      /** @type {Array<{ name: string, teaches: unknown, where: string }>} */
+      const items = [];
+      for (const it of game.items?.contents ?? []) if (it.flags?.[ID]?.teaches) items.push({ name: it.name, teaches: it.flags[ID].teaches, where: "world" });
+      for (const a of game.actors?.contents ?? []) for (const it of a.items ?? []) if (it.flags?.[ID]?.teaches) items.push({ name: it.name, teaches: it.flags[ID].teaches, where: a.name });
+      for (const l of recipeItemLines(Data.recipes().list, items)) add(l.level, l.text);
+      add("info", S.get("undiscoveredRecipes") === "hide" ? "Recipes not known yet: hidden from players (display only: every client receives the recipes)." : "Recipes not known yet: shown to players, greyed, with how to get each.");
     });
     h.check(add => {
       const st = CM.rulesStatus(Data.rules());

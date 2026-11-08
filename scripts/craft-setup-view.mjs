@@ -8,7 +8,8 @@
  */
 import { esc } from "./const.mjs";
 import { badge } from "../vendor/wanderers-core/index.mjs";
-import { RECIPES_MAX, MATERIALS_MAX, RECIPE_NAME_MAX, GROUP_MAX, RECIPE_NOTES_MAX, QTY_MAX, DC_MIN, DC_MAX, RARITY_OVERRIDES } from "./recipes-model.mjs";
+import { RECIPES_MAX, MATERIALS_MAX, RECIPE_NAME_MAX, GROUP_MAX, RECIPE_NOTES_MAX, QTY_MAX, DC_MIN, DC_MAX, RARITY_OVERRIDES, LEARN_ROUTES } from "./recipes-model.mjs";
+import { ROUTE_LABELS } from "./learn-model.mjs";
 import { FAIL_RULES, ROUNDING, PCT_MAX, HELPERS_MAX, DAY_HOURS_MAX, RULES_VERSION } from "./craft-model.mjs";
 import { signed } from "./ranks-model.mjs";
 
@@ -37,24 +38,26 @@ export function ioPanel(kind, json, hint) {
 
 /**
  * @typedef {import("./recipes-model.mjs").Recipe} Recipe
- * @typedef {{ id?: string, name?: string, profession?: string, group?: string, result?: Partial<import("./recipes-model.mjs").RecipeResult>, rarity?: string, materials?: Array<Partial<import("./recipes-model.mjs").Material>>, dc?: number | null, hours?: number | null, cost?: number | null, auto?: boolean, notes?: string }} RecipeDraft
+ * @typedef {{ id?: string, name?: string, profession?: string, group?: string, result?: Partial<import("./recipes-model.mjs").RecipeResult>, rarity?: string, materials?: Array<Partial<import("./recipes-model.mjs").Material>>, dc?: number | null, hours?: number | null, cost?: number | null, auto?: boolean, learn?: string, notes?: string }} RecipeDraft
+ * @typedef {{ uuid: string, name: string, img: string, consume: boolean }} TeachItem a world item that teaches the recipe
  */
 
 /**
  * The Recipes page: the list and, when editing, the editor (`draft` holds unsaved fields).
- * @param {{ list: Recipe[], professions: Choice[], rarities: Choice[], editing?: string | null, draft?: RecipeDraft | null, warnings?: string[], json: string, filter?: string }} m
+ * @param {{ list: Recipe[], professions: Choice[], rarities: Choice[], editing?: string | null, draft?: RecipeDraft | null, warnings?: string[], json: string, filter?: string, teachItems?: TeachItem[] }} m
  */
 export function recipesPage(m) {
   const profLabel = (/** @type {string} */ id) => m.professions.find(p => p.key === id)?.label ?? (id ? `${id} (missing)` : "(none)");
   const rarLabel = (/** @type {string} */ k) => m.rarities.find(r => r.key === k)?.label ?? k;
   const list = m.filter ? m.list.filter(r => r.profession === m.filter) : m.list;
   const rows = list.map(r => `<tr data-id="${esc(r.id)}"${m.editing === r.id ? ` class="active"` : ""}>
-      <td><b>${esc(r.name)}</b>${r.auto ? ` ${badge("info", "everyone", { small: true })}` : ""}${r.group ? `<br><span class="wc-hint">${esc(r.group)}</span>` : ""}</td>
+      <td><b>${esc(r.name)}</b>${r.auto ? ` ${badge("info", "everyone", { small: true })}` : ""}${!r.auto && r.learn === "item" ? ` ${badge("info", "recipe item", { small: true })}` : ""}${!r.auto && r.learn === "gm" ? ` ${badge("info", "GM only", { small: true })}` : ""}${r.group ? `<br><span class="wc-hint">${esc(r.group)}</span>` : ""}</td>
       <td>${esc(profLabel(r.profession))}</td>
       <td>${r.result.uuid ? esc(r.result.name || r.result.uuid) : `<span class="wc-hint">no item</span>`}${r.result.qty > 1 ? ` × ${r.result.qty}` : ""}</td>
       <td>${esc(r.rarity === "none" ? "Mundane" : rarLabel(r.rarity || r.result.rarity) || "Mundane")}</td>
       <td>${r.materials.length}</td>
-      <td class="wc-end wg-nowrap"><button type="button" class="wc-btn wc-btn-sm" data-action="recEdit" data-id="${esc(r.id)}">Edit</button>
+      <td class="wc-end wg-nowrap"><button type="button" class="wc-btn wc-btn-sm" data-action="recTeach" data-id="${esc(r.id)}" aria-label="Teach ${esc(r.name)} to characters"${r.auto ? " disabled" : ""}>Teach to…</button>
+        <button type="button" class="wc-btn wc-btn-sm" data-action="recEdit" data-id="${esc(r.id)}">Edit</button>
         <button type="button" class="wc-btn wc-btn-sm wc-btn-danger" data-action="recDelete" data-id="${esc(r.id)}" aria-label="Delete ${esc(r.name)}">Delete</button></td></tr>`).join("");
   const filter = `<label class="wg-check">Show <select data-wg-recfilter>${opt("", "every profession", !m.filter)}${m.professions.map(p => opt(p.key, p.label, p.key === m.filter)).join("")}</select></label>`;
   const table = m.list.length
@@ -71,7 +74,7 @@ export function recipesPage(m) {
 
 /**
  * The recipe editor (a new recipe when `r` is null; the draft's fields win over the stored ones).
- * @param {Recipe | null} r @param {{ professions: Choice[], rarities: Choice[], draft?: RecipeDraft | null }} m
+ * @param {Recipe | null} r @param {{ professions: Choice[], rarities: Choice[], draft?: RecipeDraft | null, teachItems?: TeachItem[] }} m
  */
 export function recipeEditor(r, m) {
   const d = /** @type {RecipeDraft} */ ({ ...(r ?? {}), ...(m.draft ?? {}) });
@@ -98,6 +101,9 @@ export function recipeEditor(r, m) {
       <label class="wg-field"><span>Coin cost (gp)</span><input type="number" class="wg-num" name="cost" min="0" step="any" value="${nv(d.cost)}" placeholder="rules"></label>
       <p class="wc-hint">Leave DC, time and cost empty to use the Crafting rules page. Time is only shown, never added to the calendar.</p>
       <label class="wg-check"><input type="checkbox" name="auto"${d.auto ? " checked" : ""}> Known by everyone with the profession (no need to learn it)</label>
+      <label class="wg-field"><span>Learned by</span><select name="learn">${LEARN_ROUTES.map(k => opt(k, ROUTE_LABELS[k], k === (d.learn ?? "rank"))).join("")}</select></label>
+      <p class="wc-hint">Rank: a player learns it on the Recipes page when their rank allows. Recipe item: only by using a recipe item (sold or found like any item), or a GM teaching it. GM only: only a GM teaches it. A GM can always teach a recipe (Teach, Teach to…).</p>
+      ${teachBox(r, m.teachItems ?? [])}
       <fieldset class="wg-fieldset"><legend>Materials (used up on a craft)</legend>
         <div class="wg-drop" data-wg-drop="mat.new">${mats.length ? `<table class="wc-table"><thead><tr><th>Name</th><th>Item UUID</th><th>Qty</th><th><span class="wc-sr">Remove</span></th></tr></thead><tbody>${matRows}</tbody></table>` : `<p class="wc-hint">None yet: drop items here, or press Add material.</p>`}</div>
         <p class="wc-row"><button type="button" class="wc-btn wc-btn-sm" data-action="matAdd"${mats.length >= MATERIALS_MAX ? " disabled" : ""}><i class="fa-solid fa-plus" aria-hidden="true"></i> Add material</button>
@@ -106,6 +112,31 @@ export function recipeEditor(r, m) {
     </div>
     <footer class="wc-row wc-end wg-pad"><button type="button" class="wc-btn wc-btn-ghost" data-action="recCancel">Cancel</button>
       <button type="submit" class="wc-btn wc-btn-primary"><i class="fa-solid fa-floppy-disk" aria-hidden="true"></i> Save recipe</button></footer></form>`;
+}
+
+/**
+ * The *Taught by item* box of the recipe editor: the world items that teach this recipe (keep / use up, Remove), a drop zone and
+ * *Make recipe item*. Only for a saved recipe (the flag names its id).
+ * @param {Recipe | null} r @param {TeachItem[]} items
+ */
+export function teachBox(r, items) {
+  if (!r) return `<fieldset class="wg-fieldset"><legend>Taught by item</legend><p class="wc-hint">Save the recipe first, then drop an item here or make a recipe item.</p></fieldset>`;
+  const rows = items.map((it, i) => `<tr><td>${it.img ? `<img class="wg-thumb" src="${esc(it.img)}" alt="">` : ""}${esc(it.name)}</td>
+      <td><label class="wg-check"><input type="checkbox" data-wg-keep="${esc(it.uuid)}"${it.consume ? "" : " checked"} aria-label="Keep ${esc(it.name)} after learning"> Kept after learning</label></td>
+      <td class="wc-end"><button type="button" class="wc-btn wc-btn-sm wc-btn-danger" data-action="teachRemove" data-item="${esc(it.uuid)}" data-index="${i}" aria-label="Stop ${esc(it.name)} teaching this recipe">Remove</button></td></tr>`).join("");
+  return `<fieldset class="wg-fieldset"><legend>Taught by item</legend>
+    <div class="wg-drop" data-wg-drop="teach">${items.length ? `<table class="wc-table"><thead><tr><th>Item</th><th>After learning</th><th><span class="wc-sr">Remove</span></th></tr></thead><tbody>${rows}</tbody></table>` : `<p class="wc-hint">No item teaches it yet: drop an item from the Items sidebar here, or make one.</p>`}</div>
+    <p class="wc-row"><button type="button" class="wc-btn wc-btn-sm" data-action="teachMake" data-id="${esc(r.id)}"><i class="fa-solid fa-scroll" aria-hidden="true"></i> Make recipe item</button>
+      <span class="wc-hint">A character carrying the item learns the recipe from it (their rank still applies); one is used up unless it is kept. Copies of the item (a merchant's stock, loot) teach too.</span></p></fieldset>`;
+}
+
+/**
+ * The *Teach to…* picker: characters with a tick each (already known ones ticked and disabled).
+ * @param {{ recipe: string, actors: Array<{ uuid: string, name: string, known: boolean, note: string }> }} m
+ */
+export function teachToHTML(m) {
+  if (!m.actors.length) return `<p>No characters in this world yet.</p>`;
+  return `<p class="wc-hint">Teach ${esc(m.recipe)} to the ticked characters (no rank check; a GM teaching).</p><div class="wg-form">${m.actors.map(a => `<label class="wg-check wg-block"><input type="checkbox" name="teach" value="${esc(a.uuid)}"${a.known ? " checked disabled" : ""}> ${esc(a.name)}${a.known ? ` <span class="wc-hint">(knows it)</span>` : a.note ? ` <span class="wc-hint">(${esc(a.note)})</span>` : ""}</label>`).join("")}</div>`;
 }
 
 /**
@@ -127,7 +158,7 @@ export function readRecipeForm(entries) {
     else if (k === "result.qty") o.result.qty = Number(s) || 1;
     else if (k === "auto") o.auto = s === "on" || s === "true";
     else if (["dc", "hours", "cost"].includes(k)) o[k] = s.trim() === "" ? null : Number(s);
-    else if (["id", "name", "profession", "group", "rarity", "notes"].includes(k)) o[k] = s;
+    else if (["id", "name", "profession", "group", "rarity", "notes", "learn"].includes(k)) o[k] = s;
   }
   o.materials = Object.keys(mats).map(Number).sort((a, b) => a - b).map(i => ({ uuid: mats[i].uuid ?? "", name: mats[i].name ?? "", qty: mats[i].qty ?? 1 }));
   if (!o.id) delete o.id;

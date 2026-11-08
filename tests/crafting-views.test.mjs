@@ -7,13 +7,18 @@ import { assess, normalizeRules, BOOK_VALUES, defaultRules, RULES_VERSION } from
 import { cleanRecipe, normalizeKnown, normalizeRecipes } from "../scripts/recipes-model.mjs";
 import { defaultRanks, RARITIES } from "../scripts/ranks-model.mjs";
 import { cleanProfession } from "../scripts/professions-model.mjs";
+import { learnState } from "../scripts/learn-model.mjs";
 
 const prof = cleanProfession({ id: "smithing", name: "Smithing", tools: ["smith"] });
 const mk = (o, extra = {}) => {
   const recipe = cleanRecipe({ profession: "smithing", result: { uuid: "Item.x", name: o.name, img: "x.webp", type: "weapon", price: { value: 4, denomination: "gp" } }, ...o });
   const a = assess({ recipe, profession: prof, rules: normalizeRules({ v: 1, dc: 12 }), ranks: defaultRanks(), facts: { pb: 2, tools: { smith: 1 } }, known: normalizeKnown({ v: 1, ids: ["known-one", "<x>"] }), inventory: [], purse: 0, values: BOOK_VALUES, worldValues: BOOK_VALUES, toolLabels: { smith: "Smith's tools" } });
-  return { ...a, group: o.group ?? "Weapons", img: "x.webp", notes: o.notes ?? "", qty: 1, toolTotal: "+4", source: o.auto ? "everyone" : "", ...extra };
+  const route = o.learn ?? "rank";
+  const row = { ...a, group: o.group ?? "Weapons", img: "x.webp", notes: o.notes ?? "", qty: 1, toolTotal: "+4", source: o.auto ? "everyone" : "", route, ...extra };
+  return { ...row, learnState: learnState({ knows: row.knows, route, rankOk: row.rankOk, playersLearn: true, hasItem: !!row.hasItem, gm: false }) };
 };
+/** Rows as a given viewer sees them (the window computes learnState per user). */
+const as = (list, o) => list.map(r => ({ ...r, learnState: learnState({ knows: r.knows, route: r.route, rankOk: r.rankOk, playersLearn: o.playersLearn ?? true, hasItem: !!r.hasItem, gm: !!o.gm }) }));
 const rows = [mk({ id: "known-one", name: "Known <one>", notes: "a & b" }), mk({ id: "auto", name: "Everyone's", auto: true, group: "Tools" }), mk({ id: "rare", name: "Rare Thing", result: { uuid: "Item.y", name: "Rare Thing", rarity: "rare" } }), mk({ id: "new", name: "Unknown" })];
 const base = { mode: "craft", actorName: "Ma<ren>", profession: { id: "smithing", name: "Smithing", icon: "M0 0" }, rankText: "Novice +2", craftsUpTo: "Common", gm: false, playersLearn: true, economyNote: "book values", query: "", filter: "all", rows, selected: null, helpers: 0, helpersMax: 0, helperDivides: false, hoursPerDay: null, failText: "Kept", approval: false, noGM: false, money: n => `<i data-money="${n}"></i>` };
 
@@ -53,9 +58,9 @@ test("Recipes page: sections and buttons by role", () => {
   assert.equal((p.match(/data-action="wgLearn"/g) ?? []).length, 1, "a player learns what their rank allows");
   assert.ok(!p.includes("wgForget"));
   assert.ok(p.includes("with the profession"));
-  const off = V.recipesPageHTML({ ...base, mode: "recipes", playersLearn: false });
-  assert.ok(!off.includes("wgLearn") && off.includes("ask your GM"));
-  const gm = V.recipesPageHTML({ ...base, mode: "recipes", gm: true });
+  const off = V.recipesPageHTML({ ...base, mode: "recipes", playersLearn: false, rows: as(rows, { playersLearn: false }) });
+  assert.ok(!off.includes(`data-action="wgLearn"`) && off.includes("Ask your GM"));
+  const gm = V.recipesPageHTML({ ...base, mode: "recipes", gm: true, rows: as(rows, { gm: true }) });
   assert.equal((gm.match(/data-action="wgLearn"/g) ?? []).length, 2, "the GM teaches anything");
   assert.equal((gm.match(/data-action="wgForget"/g) ?? []).length, 1, "not the everyone recipe");
   assert.equal(V.craftWindowHTML({ ...base, mode: "recipes" }), p);

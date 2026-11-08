@@ -2,6 +2,53 @@
 
 All notable changes to Wanderer's Guild. Versions follow the `version` in `module.json`.
 
+## 0.4.0 (2026-11-08)
+
+Recipe discovery and learning: three ways to learn a recipe, recipe items, teaching several characters at once, and a learn card.
+
+### Added
+
+- **Learned by** on each recipe (setup › Recipes › editor): *Rank* (players learn it themselves on the Recipes page when their rank allows, as before; the default for new recipes and for every recipe saved before 0.4), *Recipe item* (only by using a recipe item, or a GM teaching it) or *GM only*. A GM can always teach any recipe.
+- **Recipe items**, like spell scrolls: in the recipe editor drop an item from the Items sidebar on *Taught by item*, or press *Make recipe item* (a new loot item "Recipe: X" with the recipe's rarity). Copies of the item (a merchant's stock, loot, an inventory) teach too, so a recipe is bought by buying its item. A character carrying one sees **Learn from item** on the Crafting window's Recipes page and in a *Recipe items* box on the Professions window and the toolkit sheet page. Rank still applies (an item above the character's rank says "needs Adept +4" and stays in the inventory). Learning uses one item up unless the GM ticked *Kept after learning*.
+- **Teach to…** on setup › Recipes: teach one recipe to several characters at once (one Teach per character, as the GM).
+- **Recipes not known yet** (setup › Settings): *Show* (default: every recipe, greyed, with how to get it: *Learn*, *Needs a recipe item*, *Ask your GM*) or *Hide* (players see only the recipes they know, and the ones a recipe item they carry teaches). Display only: the recipes are a world setting every client receives.
+- The Recipes page's groups: *Known*, *Can learn*, *Needs a higher rank*, *Needs a recipe item*, *Ask your GM*.
+- A **learn card**, whispered to the player and the GMs: "Maren learned Plain Blade" (from a recipe item / from the GM).
+- Hook `wanderers-guild.learned` `{ actorId, recipeId, source }` (experimental; `source` is `rank`, `item` or `gm`), on the active GM's client.
+- API (experimental): `crafting.learnFromItem(actor, item)`, `crafting.recipeItems(actor)`, GM `crafting.teachTo(recipeId, actors)` and `crafting.makeRecipeItem(recipeId)`.
+- Health: recipe items whose recipe no longer exists (warn), recipe items for a GM-only recipe (warn), *Recipe item* recipes that no item teaches (warn), a count of recipe items (info), the *Recipes not known yet* choice (info).
+- Remove data: category *Recipe items* (removes the mark from world items and characters' items; the items stay). Learn cards are removed with the other cards.
+
+### Changed
+
+- `recipeBook` is version 2 (each recipe has `learn`); version 1 reads as *Rank*, and the Import box accepts version 1 and 2.
+- The `learnRecipe` request is refused for a player when the recipe is *Recipe item* or *GM only*.
+
+### Under the hood
+
+- `learn-model.mjs` (pure): `assessLearn(facts, recipe, via)` is the one decision for the window and the active GM's client; the `teaches` item flag (`{ v: 1, recipe, consume }`), `itemOnActor`, `useUpPlan`, `learnState`, `visibleRows`, health lines, the made item's data, the card flag and hook payload.
+- New request `learnFromItem` `{ actor, item }`: the sender must own the actor, the item must be embedded on that actor (its UUID starts with the actor's), the active GM's client reads the recipe from the item's stored flag (never a recipe id from the payload), checks again, learns, then lowers or deletes the item; one at a time per character (with crafts).
+- `learn-gm.mjs`: the GM's world-item flag writes (GM clicks only); a repo test pins it to world items.
+- No trainers (no NPC trainer flag, request or reach); skill-ups, batch crafting and better results are not in this release.
+
+### Untested in Foundry
+
+Check on Foundry 14.370 with dnd5e 6.0.6, as a player and as the GM:
+
+- [ ] A recipe saved before 0.4 shows *Learned by: Rank* in the editor; a player's Learn still works.
+- [ ] *Learned by: Recipe item*: a player's row says *Needs a recipe item*, no Learn button; the GM's Teach works. *GM only*: *Ask your GM*.
+- [ ] Drop a world item on *Taught by item*: it is listed; untick/tick *Kept after learning*; Remove takes the mark off (the item stays). Drop a compendium item: refused with "import a compendium item first".
+- [ ] *Make recipe item*: "Recipe: X" appears in the Items sidebar (loot, book icon, recipe's rarity, description).
+- [ ] Give a player the recipe item (drag to their sheet, buy it from an Item Piles merchant): *Learn from item* on the Recipes page and in the Professions window's *Recipe items* box (and the toolkit sheet page); pressing it learns the recipe, the stack goes down by one (or the item is deleted), the learn card is whispered to the player and the GMs, the hook fires on the GM client.
+- [ ] A kept recipe item stays after learning; a second character can learn from it after it is handed over.
+- [ ] A recipe item above the character's rank: "needs <rank>", no button, stays in the inventory.
+- [ ] **Spoofing**: as a player, in the console, send `learnFromItem` with your own actor and another actor's recipe item UUID (`game.modules.get("wanderers-guild").api.crafting.learnFromItem(game.user.character, "<other actor uuid>.Item.<id>")`): refused "That item isn't in this character's inventory", nothing learned, nothing used up. Same with a world item's UUID, and with another player's actor as `actor` (refused silently: not the owner).
+- [ ] Two quick presses of *Learn from item* on a one-item stack: learned once, one item used.
+- [ ] *Teach to…*: the dialog lists the characters (known ones ticked and greyed); Teach sends one learn per ticked character; cards posted.
+- [ ] *Recipes not known yet* = Hide: a player's Recipes and Craft pages list only known recipes (plus recipe items they carry); the GM still sees all. Show: greyed rows with how to get each.
+- [ ] Health: recipe item for a deleted recipe, *Recipe item* recipe with no item, the count.
+- [ ] Remove data › Recipe items: the mark is removed from world and carried items; learn cards removed with *cards*.
+
 ## 0.3.3 (2026-11-07)
 
 ### Fixed

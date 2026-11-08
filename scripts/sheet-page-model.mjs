@@ -44,7 +44,7 @@ export function pageStatus(f) {
 }
 
 /**
- * The button a click on our page hit, as `{ act, prof, what }`, or null. Only `data-wg-act` buttons count (never the sheet's
+ * The button a click on our page hit, as `{ act, prof, what, item? }` (`item`: a recipe item's UUID), or null. Only `data-wg-act` buttons count (never the sheet's
  * `data-action`). Duck-typed so Node can test it with plain objects.
  * @param {any} target the click's target element
  */
@@ -52,5 +52,5 @@ export function pageClick(target) {
   const b = target?.closest?.("[data-wg-act]");
   if (!b || b.disabled) return null;
   const d = b.dataset ?? {};
-  return { act: String(d.wgAct ?? ""), prof: String(d.prof ?? ""), what: String(d.what ?? "") };
+  return { act: String(d.wgAct ?? ""), prof: String(d.prof ?? ""), what: String(d.what ?? ""), ...(d.item ? { item: String(d.item) } : {}) };
 }

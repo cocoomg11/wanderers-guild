@@ -20,7 +20,7 @@ export const actionOf = id => (id === "craft" || id === "recipes" ? "wgCraft" : 
  */
 export const actAttr = guest => (guest ? "data-wg-act" : "data-action");
 
-/** @typedef {ReturnType<typeof import("./character-model.mjs").professionsView>} View */
+/** @typedef {ReturnType<typeof import("./character-model.mjs").professionsView> & { recipeItems?: Array<{ uuid: string, name: string, img: string, recipe: string, ok: boolean, text: string }>, canUse?: boolean }} View */
 /** @typedef {View["cards"][number]} Prof */
 
 /** @param {Prof} p */
@@ -72,6 +72,17 @@ export function rowHTML(p, guest = false) {
 }
 
 /**
+ * One carried recipe item: what it teaches and its Learn button (or why not).
+ * @param {{ uuid: string, name: string, img: string, recipe: string, ok: boolean, text: string }} it @param {boolean} guest @param {boolean} canUse
+ */
+export function recipeItemHTML(it, guest, canUse) {
+  const btn = it.ok && canUse ? `<button type="button" class="wg-gbtn sm" ${actAttr(guest)}="wgLearnItem" data-item="${esc(it.uuid)}">Learn from item</button>` : "";
+  return `<li class="wg-srow wg-ritem">
+    <span class="wg-nm"><b>${esc(it.name)}</b><small>${it.recipe ? `Teaches ${esc(it.recipe)}` : "Teaches a recipe that no longer exists"}</small></span>
+    <span class="wg-rar${it.ok ? "" : " wg-neg"}">${esc(it.text)}</span>${btn}</li>`;
+}
+
+/**
  * The whole window body, or (`guest`) the body of the Professions page on the Wanderer's Toolkit character sheet: the same cards and
  * lists, without our window header (the sheet draws the page title), buttons wired by `data-wg-act`, and the class `wg-page` so it
  * flows inside the sheet instead of filling a window.
@@ -95,7 +106,8 @@ export function professionsHTML(v, o = {}) {
   const others = v.others.length ? `<section class="wg-box"><h4>Other professions<span class="r">no limit</span></h4><ul class="wg-list">${v.others.map(p => rowHTML(p, guest)).join("")}</ul></section>` : "";
   const unlearned = v.unlearned.length ? `<section class="wg-box"><h4>Not learned<span class="r">needs a tool proficiency</span></h4><ul class="wg-list">${v.unlearned.map(p => rowHTML(p, guest)).join("")}</ul></section>` : "";
   const empty = none ? `<div class="wg-empty"><p>No professions yet.</p><p class="wg-dim">A profession is learned with a tool proficiency (from a background, class, species or training).${v.hiddenUnlearned ? ` This world has ${v.hiddenUnlearned} to choose from.` : ""}</p></div>` : "";
+  const items = (v.recipeItems ?? []).length ? `<section class="wg-box"><h4>Recipe items<span class="r">carried</span></h4><ul class="wg-list">${(v.recipeItems ?? []).map(it => recipeItemHTML(it, guest, !!v.canUse)).join("")}</ul></section>` : "";
   const recent = `<section class="wg-box"><h4>Recent<span class="r">crafting and gathering checks</span></h4><p class="wg-dim wg-pad">Crafting and gathering results are posted to chat. A history here is ${esc(COMING.toLowerCase())}</p></section>`;
   const open = guest ? `<p class="wg-pad"><button type="button" class="wg-gbtn sm" ${act}="wgWindow">Open the Professions window</button></p>` : "";
-  return `${root}${head}<main class="wg-body">${empty}${cards}${others}${unlearned}${recent}${open}</main></div>`;
+  return `${root}${head}<main class="wg-body">${empty}${cards}${others}${unlearned}${items}${recent}${open}</main></div>`;
 }

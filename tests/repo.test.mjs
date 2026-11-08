@@ -25,18 +25,30 @@ test("windows carry core's UI_CLASSES, never a literal revision", () => {
 const WRITERS = ["craft-leader.mjs", "gather-leader.mjs", "economy.mjs"];
 /** GM clicks that write map Notes only (placing / editing / deleting gathering nodes, Remove data). */
 const NOTE_WRITERS = ["nodes.mjs", "cleanup.mjs"];
+/** GM clicks that write our flag on world items only (recipe items, 0.4). */
+const ITEM_FLAG_WRITERS = ["learn-gm.mjs"];
 
 test("no direct socket use, no writes to other modules' flags, actor writes only in the leader's files", () => {
   for (const f of scripts) {
     const s = read(`scripts/${f}`);
     assert.ok(!s.includes("game.socket"), `${f}: sockets go through core's leader`);
     assert.ok(!/setFlag\(\s*["'](?!wanderers-guild)/.test(s), f);
-    assert.ok(!/(?<!un)setFlag\(\s*ID\b/.test(s) || WRITERS.includes(f), `${f}: our flags are written by the leader`);
+    assert.ok(!/(?<!un)setFlag\(\s*ID\b/.test(s) || WRITERS.includes(f) || ITEM_FLAG_WRITERS.includes(f), `${f}: our flags are written by the leader`);
     if (!WRITERS.includes(f)) assert.ok(!/actor\.update\(/.test(s), `${f}: only the leader writes actors`);
     const embedded = [...s.matchAll(/\.(create|update|delete)EmbeddedDocuments\(\s*("[A-Za-z]+")?/g)];
     if (NOTE_WRITERS.includes(f)) assert.ok(embedded.every(m => m[2] === '"Note"'), `${f}: only Notes`);
     else if (!WRITERS.includes(f)) assert.equal(embedded.length, 0, `${f}: only the leader writes actors`);
   }
+  // learn-gm.mjs writes only world items (the Items sidebar): its flag writes are on `item` from worldItem(), never an actor.
+  const lg = read("scripts/learn-gm.mjs");
+  assert.ok([...lg.matchAll(/(\w+)\.(?:un)?setFlag\(/g)].every(m => m[1] === "item"), "learn-gm.mjs: flag writes on world items only");
+  assert.ok(/game\.items\?\.get\(id\)/.test(lg) && !/fromUuid/.test(lg), "learn-gm.mjs: items come from the Items sidebar, never by UUID");
+  // Learning from an item: the leader checks the item is on that actor and reads the recipe from the item, never the payload.
+  const cl = read("scripts/craft-leader.mjs");
+  assert.ok(/leader\.handle\("learnFromItem", onLearnFromItem\)/.test(cl));
+  assert.ok(/LM\.itemOnActor\(data\.item, actor\.uuid\)/.test(cl), "embedded on that actor");
+  assert.ok(!/data\.recipe/.test(cl.slice(cl.indexOf("async function onLearnFromItem"), cl.indexOf("async function onForget"))), "no recipe id from the payload");
+  assert.ok(/LM\.assessLearn\(/.test(cl) && /serial\(data\.actor/.test(cl));
   // The coin payment runs only from the leader's handlers.
   for (const f of scripts.filter(n => !WRITERS.includes(n))) assert.ok(!/Eco\.pay\(/.test(read(`scripts/${f}`)), f);
   const leader = read("scripts/craft-leader.mjs");

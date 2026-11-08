@@ -45,6 +45,15 @@ test("request schemas: what each kind accepts and refuses", () => {
   assert.equal(req("gather", { ...noDays, scene: "abcdefghij123456" }).ok, false, "days is required");
   assert.equal(req("gatherReset", { days: 4 }).ok, true);
   assert.equal(req("gatherReset", { days: 31 }).ok, false);
+  // 0.4: learn from a carried recipe item. The recipe is never in the payload (the leader reads it from the item).
+  const item = `${actor}.Item.abcdefghij654321`;
+  assert.equal(req("learnFromItem", { actor, item }).ok, true);
+  assert.equal(REQUESTS.learnFromItem.from, undefined);
+  assert.equal(req("learnFromItem", { actor, item, recipe: "blade" }).ok, false, "no recipe from the client");
+  assert.equal(req("learnFromItem", { actor, item, user: "x" }).ok, false, "no payload user field");
+  assert.equal(req("learnFromItem", { actor }).ok, false, "item is required");
+  assert.equal(req("learnFromItem", { actor, item: "not a uuid" }).ok, false);
+  assert.equal(req("learnFromItem", { actor, item: "<b>.x" }).ok, false);
 });
 
 // core.mjs binds core to this module. These definitions throw on a typo (duplicate key, bad type, a need that isn't a feature), so
@@ -56,11 +65,12 @@ test("features, settings and requests are well formed", () => {
   assert.deepEqual(F.FEATURES.find(f => f.id === "crafting").needs, ["professions"]);
   assert.ok(F.FEATURES.every(f => f.key === `feature-${f.id}`));
   assert.deepEqual(F.FEATURES.find(f => f.id === "sheetButton").needs, ["professions"]);
-  assert.deepEqual(S.ROWS.map(r => r.key), ["professionList", "rankTable", "showUnlearned", "recipeBook", "craftRules", "playersLearn", "craftApproval", "worldCoins", "gatherRules", "gatherReset", "gatherOnce", "gatherArea", "gatherJourney", "debugLog"]);
-  assert.deepEqual(Object.keys(REQUESTS), ["learnRecipe", "forgetRecipe", "craft", "craftDecide", "gather", "gatherReset"]);
+  assert.deepEqual(S.ROWS.map(r => r.key), ["professionList", "rankTable", "showUnlearned", "recipeBook", "craftRules", "playersLearn", "undiscoveredRecipes", "craftApproval", "worldCoins", "gatherRules", "gatherReset", "gatherOnce", "gatherArea", "gatherJourney", "debugLog"]);
+  assert.deepEqual(Object.keys(REQUESTS), ["learnRecipe", "forgetRecipe", "learnFromItem", "craft", "craftDecide", "gather", "gatherReset"]);
   assert.equal(HOOKS.crafted, `${ID}.crafted`);
   assert.equal(HOOKS.ready, `${ID}.ready`);
   assert.equal(HOOKS.gathered, `${ID}.gathered`);
+  assert.equal(HOOKS.learned, `${ID}.learned`);
   assert.deepEqual([...RECORDS], ["professionList", "rankTable", "recipeBook", "craftRules", "gatherRules", "gatherReset", "windowPlacement"]);
 });
 
@@ -71,6 +81,9 @@ test("record defaults are what the normalizers give for nothing stored", () => {
   assert.deepEqual(row("recipeBook").default, normalizeRecipes(undefined));
   assert.deepEqual(row("craftRules").default, normalizeRules(undefined));
   assert.deepEqual([row("playersLearn").default, row("craftApproval").default, row("worldCoins").default], [true, false, false]);
+  assert.equal(row("undiscoveredRecipes").default, "show");
+  assert.deepEqual(Object.keys(row("undiscoveredRecipes").choices), ["show", "hide"]);
+  assert.match(row("undiscoveredRecipes").hint, /Display only/);
   assert.deepEqual(row("gatherRules").default, normalizeGatherRules(undefined));
   assert.ok(row("gatherRules").default.tiers.every(t => t.dc === null), "no rulebook figures ship");
   assert.deepEqual([row("gatherOnce").default, row("gatherArea").default, row("gatherJourney").default], [true, true, true]);

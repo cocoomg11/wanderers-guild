@@ -40,6 +40,7 @@ export const S = createSettings(ID, [
   { key: "recipeBook", type: "object", default: { v: RECIPES_VERSION, list: [] }, hidden: true, onChange: fire },
   { key: "craftRules", type: "object", default: defaultRules(), hidden: true, onChange: fire },
   { key: "playersLearn", type: "bool", default: true, label: "Players learn recipes themselves", hint: "A player can learn a recipe of their profession that their rank allows (the Recipes page's Learn button). Off: only a GM teaches recipes.", tab: "settings", feature: "crafting", onChange: fire },
+  { key: "undiscoveredRecipes", type: "choice", default: "show", choices: { show: "Show (greyed, with how to get each)", hide: "Hide (players see only the recipes they know)" }, label: "Recipes not known yet", hint: "Show: a player's Recipes page lists every recipe of the profession, greyed, with how to get it (Learn, Needs a recipe item, Ask your GM). Hide: players see only the recipes they know (and the ones a recipe item they carry teaches). Display only: the recipes are a world setting every client receives, so Hide is not secrecy.", tab: "settings", feature: "crafting", onChange: fire },
   { key: "craftApproval", type: "bool", default: false, label: "GM approves each craft", hint: "After the tool check, a GM card with Approve and Refuse buttons decides; nothing is made or used up until then. Off (default): the craft resolves when the roll lands, nothing waits for a GM, and a craft with no DC succeeds on the roll.", tab: "settings", feature: "crafting", onChange: fire },
   { key: "worldCoins", type: "bool", default: false, label: "Prices in the world's coins (Wanderer's Toolkit)", hint: "Show and charge crafting prices in the world's own coins (the toolkit's three-coin economy, when it is active). Off: book values (standard gold, silver and copper).", tab: "settings", feature: "crafting", onChange: fire },
   { key: "gatherRules", type: "object", default: defaultGatherRules(), hidden: true, onChange: fire },
@@ -63,8 +64,11 @@ const DAYS = { type: /** @type {const} */ ("number"), int: true, min: 1, max: DA
  * Socket requests the leader accepts: a schema per kind; anything else is refused. Each handler (craft-leader.mjs) checks the
  * sending user's rights itself (Foundry's sender, never a payload field):
  * - `learnRecipe` { actor, recipe }: a player who owns the actor (and has the profession, a rank that allows it, the
- *   *Players learn recipes* switch on), or a GM (teach: no checks but the recipe existing).
+ *   *Players learn recipes* switch on, the recipe *Learned by: Rank*), or a GM (teach: no checks but the recipe existing).
  * - `forgetRecipe` { actor, recipe }: GM only.
+ * - `learnFromItem` { actor, item }: the owner (or a GM) uses a recipe item; `item` must be an item embedded on that actor. The leader
+ *   reads the recipe from the item's own flag (never from the payload), re-checks (learn-model.mjs `assessLearn`), learns, then uses
+ *   one item up unless it is set to keep.
  * - `craft` { actor, recipe, roll, helpers }: the owner (or a GM) after rolling the tool check; `roll` is the roll's chat message,
  *   which the leader reads (author, actor, our flag, age, not used before) instead of trusting a total.
  * - `craftDecide` { message, choice }: GM only; a choice on a pending craft card.
@@ -78,6 +82,7 @@ const DAYS = { type: /** @type {const} */ ("number"), int: true, min: 1, max: DA
 export const REQUESTS = defineRequests({
   learnRecipe: { fields: { actor: ACTOR, recipe: RECIPE_ID } },
   forgetRecipe: { fields: { actor: ACTOR, recipe: RECIPE_ID }, from: "gm" },
+  learnFromItem: { fields: { actor: ACTOR, item: { type: "uuid", max: 340 } } },
   craft: { fields: { actor: ACTOR, recipe: RECIPE_ID, roll: { type: "id" }, helpers: { type: "number", int: true, min: 0, max: HELPERS_MAX } } },
   craftDecide: { fields: { message: { type: "id" }, choice: { type: "string", oneOf: CHOICES } }, from: "gm" },
   gather: { fields: { actor: ACTOR, profession: RECIPE_ID, roll: { type: "id" }, days: DAYS, node: { ...ACTOR, optional: true }, scene: { type: "id", optional: true }, token: { ...ACTOR, optional: true } } },

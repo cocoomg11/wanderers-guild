@@ -8,6 +8,8 @@ import { recipeRarity } from "./recipes-model.mjs";
 import * as Data from "./data.mjs";
 import * as D5 from "./dnd5e.mjs";
 import * as Eco from "./economy.mjs";
+import { ID } from "./const.mjs";
+import { S } from "./core.mjs";
 
 /** Everything about one actor that every recipe's assessment shares. @param {any} actor */
 export function context(actor) {
@@ -33,3 +35,30 @@ export const groupOf = r => r.group || D5.typeLabel(r.result.type) || "Recipes";
 
 /** Re-exported for the window's sort. */
 export { recipeRarity };
+
+/**
+ * The recipe items an actor carries (items with our `teaches` flag): [{ id, uuid, name, img, qty, teaches }]. Read only.
+ * @param {any} actor
+ */
+export function recipeItems(actor) {
+  const out = [];
+  for (const it of actor?.items ?? []) {
+    const t = it.flags?.[ID]?.teaches; if (!t) continue;
+    const q = Number(it.system?.quantity);
+    out.push({ id: String(it.id), uuid: String(it.uuid), name: String(it.name ?? ""), img: String(it.img ?? ""), qty: Number.isFinite(q) ? q : 1, teaches: t });
+  }
+  return out;
+}
+
+/**
+ * The plain facts `assessLearn()` needs for one actor and the user asking (learn-model.mjs), shared by the window and the leader.
+ * @param {any} actor @param {any} user
+ * @returns {import("./learn-model.mjs").LearnFacts}
+ */
+export function learnFacts(actor, user) {
+  const f = D5.facts(actor);
+  return {
+    isGM: !!user?.isGM, owns: !!user?.isGM || !!actor?.testUserPermission?.(user, "OWNER"), playersLearn: !!S.get("playersLearn"),
+    professions: Data.professions().list, tools: f.tools, pb: f.pb, ranks: Data.ranks(), known: Data.known(actor)
+  };
+}

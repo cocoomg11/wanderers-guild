@@ -3,7 +3,8 @@
  * what's missing, the time (for reference), cost, DC and rank check; Craft rolls the linked tool check (dnd5e `rollToolCheck`) on
  * this client and sends the roll's chat message to the active GM's client, which uses up the materials from the inventory and makes the
  * item (craft-leader.mjs); the detail says beforehand what will be used up (no confirm dialog). **Recipes**:
- * known, learnable and higher-rank recipes; Learn (players, when allowed), Teach and Forget (GM) are requests too. Nothing here
+ * known, learnable, higher-rank, item-only and GM-only recipes; Learn (players, when allowed), Learn from item (a carried recipe
+ * item), Teach and Forget (GM) are requests too. Nothing here
  * writes a document. Untested in Node: the pages are in crafting-view.mjs, the decision in craft-model.mjs.
  */
 import { UI_CLASSES } from "../vendor/wanderers-core/index.mjs";
@@ -14,7 +15,8 @@ import { rankFor, rarityLabel, signed } from "./ranks-model.mjs";
 import { recipesFor } from "./recipes-model.mjs";
 import { ICONS } from "./professions-model.mjs";
 import { FAIL_RULES } from "./craft-model.mjs";
-import { context, assessIn, groupOf } from "./craft-read.mjs";
+import { context, assessIn, groupOf, recipeItems } from "./craft-read.mjs";
+import { learnState, routeOf, normalizeTeaches } from "./learn-model.mjs";
 import { craftWindowHTML } from "./crafting-view.mjs";
 import * as D5 from "./dnd5e.mjs";
 import * as Eco from "./economy.mjs";
@@ -63,15 +65,25 @@ export class CraftingApp extends Base {
     const ctx = context(this.actor);
     const p = ctx.professions.find(x => x.id === this.professionId);
     const rk = rankFor(ctx.facts.pb, ctx.ranks);
+    const gm = !!game.user?.isGM; const playersLearn = !!S.get("playersLearn");
+    // Carried recipe items, by the recipe they teach (the first one found).
+    /** @type {Map<string, { uuid: string, name: string }>} */
+    const items = new Map();
+    for (const it of recipeItems(this.actor)) { const t = normalizeTeaches(it.teaches); if (t && !items.has(t.recipe) && it.qty > 0) items.set(t.recipe, { uuid: it.uuid, name: it.name }); }
     const rows = recipesFor(ctx.book, this.professionId).map(r => {
       const a = assessIn(ctx, r, this.helpers);
-      return { ...a, group: groupOf(r), img: r.result.img, notes: r.notes, qty: r.result.qty, toolTotal: a.tool ? D5.toolTotal(this.actor, a.tool.key) : "", source: r.auto ? "everyone" : "" };
+      const route = routeOf(r); const item = route === "gm" ? undefined : items.get(r.id);
+      return {
+        ...a, group: groupOf(r), img: r.result.img, notes: r.notes, qty: r.result.qty, toolTotal: a.tool ? D5.toolTotal(this.actor, a.tool.key) : "", source: r.auto ? "everyone" : "",
+        route, hasItem: !!item, itemUuid: item?.uuid ?? "", itemName: item?.name ?? "",
+        learnState: learnState({ knows: a.knows, route, rankOk: a.rankOk && a.learned, playersLearn, hasItem: !!item, gm })
+      };
     });
     return {
       mode: this.mode, actorName: this.actor.name,
       profession: { id: this.professionId, name: p?.name ?? this.professionId, icon: ICONS[p?.icon ?? "hammer"]?.d ?? ICONS.hammer.d },
       rankText: rk.row ? `${rk.row.name} ${signed(rk.row.bonus)}` : "No rank", craftsUpTo: rk.row?.rarity ? rarityLabel(rk.row.rarity, ctx.rarityLabels) : "",
-      gm: !!game.user?.isGM, playersLearn: !!S.get("playersLearn"), economyNote: Eco.note(), query: this.query, filter: this.filter,
+      gm, playersLearn, hideUnknown: S.get("undiscoveredRecipes") === "hide", economyNote: Eco.note(), query: this.query, filter: this.filter,
       rows: /** @type {any} */ (rows), selected: this.selected, helpers: this.helpers, helpersMax: ctx.rules.helpersMax, helperDivides: ctx.rules.helperDivides,
       hoursPerDay: ctx.rules.hoursPerDay, failText: FAIL_RULES[ctx.rules.failMaterials], failRule: ctx.rules.failMaterials, approval: !!S.get("craftApproval"), noGM: !leader.activeGM(), locked: this.busy || !canUse(this.actor),
       money: (/** @type {number} */ n) => Eco.html(n)
@@ -109,6 +121,7 @@ export class CraftingApp extends Base {
     if (a === "wgFilter") { this.filter = target.dataset.filter === "can" ? "can" : "all"; return this.render(); }
     if (a === "wgLearn") return this.#ask("learnRecipe", id);
     if (a === "wgForget") return this.#ask("forgetRecipe", id);
+    if (a === "wgLearnItem") return learnFromItem(this.actor, String(target.dataset.item ?? ""));
     if (a === "wgCraftNow") return this.#craft(id);
   }
 
@@ -141,6 +154,17 @@ export class CraftingApp extends Base {
 
   /** @param {any} options */
   _onClose(options) { super._onClose?.(options); if (OPEN.get(this.key) === this) OPEN.delete(this.key); }
+}
+
+/**
+ * Asks the active GM's client to learn the recipe a carried recipe item teaches (it reads the recipe from the item itself).
+ * @param {any} actor @param {string} itemUuid
+ */
+export function learnFromItem(actor, itemUuid) {
+  if (!actor?.uuid || !itemUuid) return false;
+  const ok = leader.request("learnFromItem", { actor: actor.uuid, item: itemUuid });
+  if (!ok) ui.notifications.warn(`${TITLE}: no GM is connected.`);
+  return ok;
 }
 
 /**

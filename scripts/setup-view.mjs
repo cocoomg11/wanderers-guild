@@ -140,11 +140,13 @@ export function ranksPage(m) {
 }
 
 /**
- * The Settings page: one switch per row (instant). Feature switches are in Configure Settings (they reload).
- * @param {{ rows: Array<{ key: string, label: string, hint: string, value: boolean }> }} m
+ * The Settings page: one switch per row, or a select for a choice row (instant). Feature switches are in Configure Settings (they reload).
+ * @param {{ rows: Array<{ key: string, label: string, hint: string, value: boolean | string, choices?: Record<string, string> }> }} m
  */
 export function settingsPage(m) {
-  const rows = m.rows.map(r => `<label class="wg-switch"><input type="checkbox" data-setting="${esc(r.key)}"${r.value ? " checked" : ""}><span><b>${esc(r.label)}</b><span class="wc-hint">${esc(r.hint)}</span></span></label>`).join("");
+  const rows = m.rows.map(r => (r.choices
+    ? `<label class="wg-switch wg-choice"><span><b>${esc(r.label)}</b><span class="wc-hint">${esc(r.hint)}</span></span><select data-setting-choice="${esc(r.key)}">${Object.entries(r.choices).map(([k, l]) => `<option value="${esc(k)}"${k === r.value ? " selected" : ""}>${esc(l)}</option>`).join("")}</select></label>`
+    : `<label class="wg-switch"><input type="checkbox" data-setting="${esc(r.key)}"${r.value ? " checked" : ""}><span><b>${esc(r.label)}</b><span class="wc-hint">${esc(r.hint)}</span></span></label>`)).join("");
   return pagehead("Settings", `<span class="wc-hint">Changes apply at once. The tool switches (Feature: …) are in Game Settings › ${esc(TITLE)} and reload Foundry.</span>`)
     + `<section class="wc-panel"><div class="wc-panel-body wg-form">${rows}</div></section>`
     + `<p class="wc-row"><button type="button" class="wc-btn wc-btn-ghost" data-action="resetWindows">Reset window positions</button></p>`;

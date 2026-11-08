@@ -15,7 +15,12 @@ import { versioned } from "../vendor/wanderers-core/index.mjs";
 import { ID_RE, idFrom, uniqueId } from "./professions-model.mjs";
 import { RARITY_KEYS } from "./ranks-model.mjs";
 
-export const RECIPES_VERSION = 1;
+export const RECIPES_VERSION = 2;
+/**
+ * How a recipe is learned (0.4, `recipeBook` v2; v1 recipes read as "rank"): "rank" = a player learns it when their rank allows
+ * (the Recipes page's Learn), "item" = only by using a recipe item that teaches it (or a GM teaching it), "gm" = only a GM teaches it.
+ */
+export const LEARN_ROUTES = Object.freeze(["rank", "item", "gm"]);
 /** A world holds at most this many recipes. */
 export const RECIPES_MAX = 300;
 /** Materials one recipe uses. */
@@ -59,6 +64,7 @@ export const DENOMINATIONS = Object.freeze(["pp", "gp", "ep", "sp", "cp"]);
  * @property {number | null} hours
  * @property {number | null} cost in gold pieces
  * @property {boolean} auto known by everyone with the profession
+ * @property {"rank" | "item" | "gm"} learn how it is learned (LEARN_ROUTES)
  * @property {string} notes shown to players
  * @typedef {{ v: number, list: Recipe[] }} RecipeBook
  * @typedef {{ v: number, ids: string[] }} Known
@@ -130,6 +136,7 @@ export function cleanRecipe(raw) {
     hours: optNum(o.hours, 0, HOURS_MAX),
     cost: optNum(o.cost, 0, COST_MAX),
     auto: o.auto === true,
+    learn: LEARN_ROUTES.includes(o.learn) ? o.learn : "rank",
     notes: String(o.notes ?? "").replace(/\r\n?/g, "\n").trim().slice(0, RECIPE_NOTES_MAX)
   };
 }
@@ -142,6 +149,8 @@ export function cleanRecipe(raw) {
 export const normalizeRecipes = versioned({
   version: RECIPES_VERSION,
   empty: () => ({ v: RECIPES_VERSION, list: [] }),
+  // v1 → v2: recipes gain `learn` (cleanRecipe reads a missing one as "rank").
+  upgrades: { 1: s => s },
   clean: s => {
     const taken = new Set();
     /** @type {Recipe[]} */

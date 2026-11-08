@@ -11,6 +11,7 @@ import { quality, itemSlot, UI_CLASSES } from "../vendor/wanderers-core/index.mj
 import { hoursText, usesNotice } from "./craft-model.mjs";
 import { signed } from "./ranks-model.mjs";
 import { ICONS } from "./professions-model.mjs";
+import { LEARN_SECTIONS, visibleRows } from "./learn-model.mjs";
 
 const svg = (/** @type {string} */ d) => `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="${esc(d)}"></path></svg>`;
 /** The quality colour key for a rarity (mundane shows like common). @param {string} rarity */
@@ -29,7 +30,9 @@ export const TIME_NOTE = "in game, for reference: the calendar is not advanced";
 
 /**
  * @typedef {ReturnType<typeof import("./craft-model.mjs").assess>} Assessed
- * @typedef {Assessed & { group: string, img: string, notes: string, qty: number, toolTotal: string, source: string }} Row
+ * @typedef {Assessed & { group: string, img: string, notes: string, qty: number, toolTotal: string, source: string, route?: string, learnState?: string, hasItem?: boolean, itemUuid?: string, itemName?: string }} Row
+ *   `learnState` (learn-model.mjs `learnState`): known, learn, item, teach, rank, needsItem, gm; `itemUuid`: a carried recipe item
+ *   that teaches it
  * @typedef {object} CraftView
  * @property {"craft" | "recipes"} mode
  * @property {string} actorName
@@ -38,6 +41,7 @@ export const TIME_NOTE = "in game, for reference: the calendar is not advanced";
  * @property {string} craftsUpTo
  * @property {boolean} gm
  * @property {boolean} playersLearn
+ * @property {boolean} [hideUnknown] *Recipes not known yet* is on Hide (players see only known recipes)
  * @property {string} economyNote
  * @property {string} query
  * @property {"all" | "can"} filter
@@ -126,6 +130,7 @@ function detailHTML(v, r) {
 
 /** The Craft page. @param {CraftView} v */
 export function craftPageHTML(v) {
+  v = { ...v, rows: visibleRows(/** @type {any[]} */ (v.rows.map(r => ({ learnState: r.knows ? "known" : "", ...r }))), { gm: v.gm, hide: !!v.hideUnknown, craft: true }) };
   if (!v.rows.length) return frame(v, `<main class="wg-body"><div class="wg-empty"><p>No recipes for ${esc(v.profession.name)} yet.</p><p class="wg-dim">${v.gm ? "Add them on the setup window's Recipes page." : "Your GM adds them."}</p></div></main>`);
   const shown = searchRows(v.rows, v.query).filter(r => v.filter !== "can" || r.canCraft);
   const sel = v.rows.find(r => r.id === v.selected) ?? shown[0] ?? v.rows[0];
@@ -139,33 +144,44 @@ export function craftPageHTML(v) {
   return frame(v, `<div class="wg-split">${aside}<main class="wg-body">${detailHTML(v, sel)}</main></div>`);
 }
 
+/** What the Recipes page says for each state (players). */
+export const LEARN_TEXT = Object.freeze({ needsItem: "Needs a recipe item", gm: "Ask your GM" });
+
 /** One row of the Recipes page. @param {CraftView} v @param {Row} r */
 function learnRow(v, r) {
   const q = qualityOf(r.rarity);
   const req = r.rarity ? (r.need ? `${r.need.name} ${signed(r.need.bonus)}` : "no rank") : "any rank";
+  const off = v.noGM || v.locked ? " disabled" : "";
+  const st = r.learnState ?? "";
   let act = "";
-  if (r.knows) act = r.source === "everyone" ? `<span class="wg-dim">with the profession</span>` : v.gm ? `<button type="button" class="wg-gbtn sm" data-action="wgForget" data-id="${esc(r.id)}">Forget</button>` : `<span class="wg-dim">Learned</span>`;
-  else if (v.gm) act = `<button type="button" class="wg-gbtn sm" data-action="wgLearn" data-id="${esc(r.id)}">Teach</button>`;
-  else if (!r.rankOk) act = `<span class="wg-dim">needs ${esc(req)}</span>`;
-  else if (!v.playersLearn) act = `<span class="wg-dim">ask your GM</span>`;
-  else act = `<button type="button" class="wg-gbtn sm" data-action="wgLearn" data-id="${esc(r.id)}"${v.noGM || v.locked ? " disabled" : ""}>Learn</button>`;
-  return `<li class="wg-lrow${r.knows ? " done" : ""}">
-    <span class="wg-tick${r.knows ? " on" : ""}" role="img" aria-label="${r.knows ? "Known" : "Not known"}">${r.knows ? svg("M5 12l5 5l9-10") : ""}</span>
+  if (st === "known") act = r.source === "everyone" ? `<span class="wg-dim">with the profession</span>` : v.gm ? `<button type="button" class="wg-gbtn sm" data-action="wgForget" data-id="${esc(r.id)}">Forget</button>` : `<span class="wg-dim">Learned</span>`;
+  else if (st === "teach") act = `<button type="button" class="wg-gbtn sm" data-action="wgLearn" data-id="${esc(r.id)}">Teach</button>`;
+  else if (st === "learn") act = `<button type="button" class="wg-gbtn sm" data-action="wgLearn" data-id="${esc(r.id)}"${off}>Learn</button>`;
+  else if (st === "item") act = `<button type="button" class="wg-gbtn sm" data-action="wgLearnItem" data-item="${esc(r.itemUuid ?? "")}" title="${esc(`Uses ${r.itemName ?? "the recipe item"}`)}"${off}>Learn from item</button>`;
+  else if (st === "rank") act = `<span class="wg-dim">needs ${esc(req)}</span>`;
+  else act = `<span class="wg-dim">${esc(LEARN_TEXT[/** @type {keyof typeof LEARN_TEXT} */ (st)] ?? "Ask your GM")}</span>`;
+  const known = st === "known";
+  return `<li class="wg-lrow${known ? " done" : " wg-unknown"}">
+    <span class="wg-tick${known ? " on" : ""}" role="img" aria-label="${known ? "Known" : "Not known"}">${known ? svg("M5 12l5 5l9-10") : ""}</span>
     ${itemSlot({ img: r.img || "icons/svg/item-bag.svg", name: r.name, rarity: q, size: "sm" })}
-    <span class="wg-nm"><b class="wc-q-text" data-quality="${esc(q)}">${esc(r.name)}</b><small>${esc([r.group, r.rarityLabel].filter(Boolean).join(" · "))}</small></span>
+    <span class="wg-nm"><b class="wc-q-text" data-quality="${esc(q)}">${esc(r.name)}</b><small>${esc([r.group, r.rarityLabel, r.hasItem && st !== "known" ? `you carry ${r.itemName ?? "its recipe item"}` : ""].filter(Boolean).join(" · "))}</small></span>
     <span class="wg-req${r.rankOk ? "" : " wg-neg"}">${esc(req)}</span><span class="wg-act">${act}</span></li>`;
 }
 
-/** The Recipes page: known, can learn, needs a higher rank. @param {CraftView} v */
+/** The Recipes page: Known, Can learn, Needs a higher rank, Needs a recipe item, Ask your GM. @param {CraftView} v */
 export function recipesPageHTML(v) {
-  const rows = searchRows(v.rows, v.query);
-  const known = rows.filter(r => r.knows); const learnable = rows.filter(r => !r.knows && r.rankOk); const later = rows.filter(r => !r.knows && !r.rankOk);
+  const all = visibleRows(/** @type {any[]} */ (v.rows), { gm: v.gm, hide: !!v.hideUnknown });
+  const rows = searchRows(all, v.query);
   const sect = (/** @type {string} */ label, /** @type {Row[]} */ list) => (list.length ? `<section class="wg-box"><h4>${esc(label)}<span class="r">${list.length}</span></h4><ul class="wg-list">${list.map(r => learnRow(v, r)).join("")}</ul></section>` : "");
-  const hint = v.gm ? "Teach and Forget change this character's known recipes." : v.playersLearn ? "Learn adds a recipe your rank allows; the GM can also teach you any recipe." : "Your GM teaches you recipes.";
-  const body = v.rows.length
+  const hint = v.gm ? "Teach and Forget change this character's known recipes."
+    : v.hideUnknown ? "Recipes you know, and the ones a recipe item you carry teaches. Your GM teaches you others, or you find recipe items."
+      : v.playersLearn ? "Learn adds a recipe your rank allows; some are learned from a recipe item, some only from the GM." : "Your GM teaches you recipes, or you find recipe items.";
+  const sections = LEARN_SECTIONS.map(([states, label]) => sect(label, rows.filter(r => states.includes(r.learnState ?? "")))).join("");
+  const empty = v.hideUnknown && !v.gm ? `<div class="wg-empty"><p>No ${esc(v.profession.name)} recipes known yet.</p><p class="wg-dim">Your GM teaches recipes, or you find recipe items.</p></div>` : `<div class="wg-empty"><p>No recipes for ${esc(v.profession.name)} yet.</p></div>`;
+  const body = all.length
     ? `<div class="wg-pad wg-tools"><input type="search" class="wg-search" placeholder="Search recipes" aria-label="Search recipes" value="${esc(v.query)}" data-wg-search><span class="wg-dim">${esc(hint)}</span></div>
-      ${sect("Known", known)}${sect("Can learn", learnable)}${sect("Needs a higher rank", later)}${rows.length ? "" : `<p class="wg-dim wg-pad">Nothing matches.</p>`}`
-    : `<div class="wg-empty"><p>No recipes for ${esc(v.profession.name)} yet.</p></div>`;
+      ${sections}${rows.length ? "" : `<p class="wg-dim wg-pad">Nothing matches.</p>`}`
+    : empty;
   return frame(v, `<main class="wg-body">${body}</main>`);
 }
 
@@ -213,4 +229,22 @@ export function cardHTML(c) {
     <header class="wg-chead">${itemSlot({ img: c.img || "icons/svg/item-bag.svg", name: c.recipeName, rarity: q, count: c.qty })}
       <div><b class="wc-q-text" data-quality="${esc(q)}">${esc(c.recipeName)}</b><span class="wg-dim">${esc(c.actorName)} · ${esc(STATE_TEXT[c.state] ?? c.state)}</span></div></header>
     ${roll}${time}${used}${coin}${reason}${buttons}</div>`;
+}
+
+// ------------------------------------------------------------------ learn card
+
+/** What the learn card says about where the recipe came from. */
+export const LEARN_FROM = Object.freeze({ rank: "", item: "from a recipe item", gm: "from the GM" });
+
+/**
+ * The learn card: "X learned Y (from an item / from the GM)". Whispered by the leader to the player and the GMs.
+ * @param {{ actorName: string, recipeName: string, rarity: string, img: string, source: string }} c
+ */
+export function learnCardHTML(c) {
+  const q = qualityOf(c.rarity);
+  const from = LEARN_FROM[/** @type {keyof typeof LEARN_FROM} */ (c.source)] ?? "";
+  return `<div class="${UI_CLASSES.join(" ")} wg-chat wg-chat-learn">
+    <header class="wg-chead">${itemSlot({ img: c.img || "icons/svg/book.svg", name: c.recipeName, rarity: q })}
+      <div><b class="wc-q-text" data-quality="${esc(q)}">${esc(c.recipeName)}</b><span class="wg-dim">${esc(c.actorName)} · Recipe learned</span></div></header>
+    <p class="wg-cline"><span>${esc(c.actorName)} learned ${esc(c.recipeName)}</span><b>${from ? esc(from) : ""}</b></p></div>`;
 }

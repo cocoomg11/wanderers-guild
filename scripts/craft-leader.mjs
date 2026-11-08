@@ -15,7 +15,10 @@
  * still be forged by a client (as with any Foundry roll): turn on *GM approves each craft* if that matters at your table (then a
  * roll that can't be checked goes to the GM's card with the reason instead of being refused).
  *
- * Writes: `flags.wanderers-guild.recipes` on actors (known recipes), the crafted item (created, or added to a matching stack), the
+ * Learning (0.4): Learn / Teach (`learnRecipe`) and Learn from item (`learnFromItem`) decide with learn-model.mjs `assessLearn`, post
+ * a learn card (`flags.wanderers-guild.learn`) and fire `wanderers-guild.learned`; a recipe item used up is lowered or deleted here.
+ *
+ * Writes: `flags.wanderers-guild.recipes` on actors (known recipes), used-up recipe items, the crafted item (created, or added to a matching stack), the
  * materials' quantities (lowered or deleted), the coin cost (`system.currency`, or the toolkit's `pay`), `flags.wanderers-guild.rollUsed`
  * on roll messages and our craft cards (`flags.wanderers-guild.craft`). cleanup.mjs covers the flags and the cards. Untested in Node.
  */
@@ -27,8 +30,9 @@ import * as Data from "./data.mjs";
 import * as D5 from "./dnd5e.mjs";
 import * as Eco from "./economy.mjs";
 import { verifyRoll, usedRolls } from "./roll-model.mjs";
-import { context, assessIn } from "./craft-read.mjs";
-import { cardHTML } from "./crafting-view.mjs";
+import { context, assessIn, learnFacts } from "./craft-read.mjs";
+import { cardHTML, learnCardHTML } from "./crafting-view.mjs";
+import * as LM from "./learn-model.mjs";
 
 /** Roll messages being handled (a second request for the same roll waits its turn and then finds it used). */
 const BUSY = new Set();
@@ -70,22 +74,65 @@ async function tell(user, actor, text) {
 
 // ------------------------------------------------------------------ learn / forget
 
-/** @param {{ actor: string, recipe: string }} data @param {any} user */
+/** Users who play the actor (non-GM owners). @param {any} actor */
+const playersOf = actor => game.users.filter((/** @type {any} */ u) => !u.isGM && actor?.testUserPermission?.(u, "OWNER")).map((/** @type {any} */ u) => u.id);
+
+/**
+ * Writes a learned recipe to the actor, posts the learn card (whispered to the asking user, the actor's players and the GMs) and
+ * fires `wanderers-guild.learned` (ids only). Returns false when the flag couldn't take it.
+ * @param {any} actor @param {import("./recipes-model.mjs").Recipe} recipe @param {"rank" | "item" | "gm"} source @param {any} user
+ */
+async function learnNow(actor, recipe, source, user) {
+  const r = RC.learn(Data.known(actor), recipe.id);
+  if (r.error || !r.known) { await tell(user, actor, r.error ?? "Couldn't learn it."); return false; }
+  if (!r.changed) return false;
+  await actor.setFlag(ID, "recipes", r.known);
+  log(`${actor.name} learned ${recipe.name} (${source})`);
+  try {
+    const content = learnCardHTML({ actorName: actor.name, recipeName: recipe.name, rarity: RC.recipeRarity(recipe), img: recipe.result.img, source });
+    await ChatMessage.create({ content, speaker: ChatMessage.getSpeaker({ actor }), whisper: [...new Set([user.id, ...playersOf(actor), ...gmIds()])], flags: { [ID]: { learn: LM.learnCardFlag(actor.uuid, recipe.id, source) } } });
+  } catch (e) { warn("learn card", e); }
+  try { Hooks.callAll(HOOKS.learned, LM.learnedPayload(actor.id, recipe.id, source)); } catch (e) { warn("learned hook", e); }
+  return true;
+}
+
+/** Learn (a player, rank route) or Teach (a GM). @param {{ actor: string, recipe: string }} data @param {any} user */
 async function onLearn(data, user) {
   const actor = await actorOf(data.actor); if (!actor) return log("learn: no such actor");
   if (!owns(actor, user)) return log(`learn refused: ${user.name} doesn't own ${actor.name}`);
   const recipe = Data.recipes().list.find(r => r.id === data.recipe); if (!recipe) return tell(user, actor, "That recipe no longer exists.");
-  if (!user.isGM) {
-    if (!S.get("playersLearn")) return tell(user, actor, "Only the GM teaches recipes in this world.");
-    const a = assessIn(context(actor), recipe);
-    if (!a.learned || !a.tool) return tell(user, actor, `${actor.name} doesn't have the profession for ${recipe.name}.`);
-    if (!a.rankOk) return tell(user, actor, `${recipe.name} needs a higher rank.`);
-  }
-  const r = RC.learn(Data.known(actor), recipe.id);
-  if (r.error || !r.known) return tell(user, actor, r.error ?? "Couldn't learn it.");
-  if (!r.changed) return;
-  await actor.setFlag(ID, "recipes", r.known);
-  log(`${actor.name} learned ${recipe.name}`);
+  const via = user.isGM ? "gm" : "rank";
+  const a = LM.assessLearn(learnFacts(actor, user), recipe, via);
+  if (!a.ok) { if (a.code !== "known") await tell(user, actor, a.reason); return; }
+  await learnNow(actor, recipe, via, user);
+}
+
+/**
+ * Learn from a recipe item the actor carries. The item must be embedded on that actor (its UUID starts with the actor's), the recipe
+ * comes from the item's own flag as stored (never from the payload), everything is checked again, then one item is used up unless
+ * it is set to keep. Runs one at a time per actor (with crafts), so one item can't teach twice.
+ * @param {{ actor: string, item: string }} data @param {any} user
+ */
+async function onLearnFromItem(data, user) {
+  return serial(data.actor, async () => {
+    const actor = await actorOf(data.actor); if (!actor) return log("learn from item: no such actor");
+    if (!owns(actor, user)) return log(`learn from item refused: ${user.name} doesn't own ${actor.name}`);
+    if (!LM.itemOnActor(data.item, actor.uuid)) return tell(user, actor, "That item isn't in this character's inventory.");
+    const item = actor.items.get(data.item.slice(actor.uuid.length + 6));
+    if (!item) return tell(user, actor, "That item isn't in this character's inventory.");
+    const teaches = LM.normalizeTeaches(item._source?.flags?.[ID]?.teaches ?? item.flags?.[ID]?.teaches);
+    if (!teaches) return tell(user, actor, `${item.name} doesn't teach a recipe.`);
+    const recipe = Data.recipes().list.find(r => r.id === teaches.recipe);
+    const q = Number(item.system?.quantity);
+    const a = LM.assessLearn({ ...learnFacts(actor, user), item: { teaches, qty: Number.isFinite(q) ? q : 1 } }, recipe, "item");
+    if (!a.ok || !recipe) return tell(user, actor, `${item.name}: ${a.reason}`);
+    if (!await learnNow(actor, recipe, "item", user)) return;
+    const plan = LM.useUpPlan({ id: item.id, qty: Number.isFinite(q) ? q : 1 }, a.consume);
+    try {
+      if (plan && "update" in plan) await actor.updateEmbeddedDocuments("Item", [plan.update]);
+      else if (plan && "delete" in plan) await actor.deleteEmbeddedDocuments("Item", [plan.delete]);
+    } catch (e) { warn("use up recipe item", e); }
+  });
 }
 
 /** @param {{ actor: string, recipe: string }} data */
@@ -254,6 +301,7 @@ async function decideNow(data) {
 export function registerHandlers() {
   leader.handle("learnRecipe", onLearn);
   leader.handle("forgetRecipe", onForget);
+  leader.handle("learnFromItem", onLearnFromItem);
   leader.handle("craft", onCraft);
   leader.handle("craftDecide", onDecide);
 }

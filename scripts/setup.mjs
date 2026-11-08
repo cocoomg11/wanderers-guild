@@ -20,6 +20,7 @@ import * as Health from "./health.mjs";
 import * as Cleanup from "./cleanup.mjs";
 import * as GM from "./gather-model.mjs";
 import * as GV from "./gather-view.mjs";
+import * as LearnGM from "./learn-gm.mjs";
 
 /** @type {SetupApp | null} */
 let app = null;
@@ -83,7 +84,7 @@ export class SetupApp extends Base {
     if (this.page === "recipes") {
       const book = Data.recipes(); const profs = Data.professions().list;
       const professions = [...profs].sort((a, b) => Number(b.kind === "crafting") - Number(a.kind === "crafting")).map(p => ({ key: p.id, label: p.name }));
-      return CV.recipesPage({ list: book.list, professions, rarities: this.#rarities(), editing: this.recipeEditing, draft: this.recipeDraft, warnings: RC.recipeWarnings(book, profs.map(p => p.id)), json: RC.exportRecipes(book), filter: this.recipeFilter });
+      return CV.recipesPage({ list: book.list, professions, rarities: this.#rarities(), editing: this.recipeEditing, draft: this.recipeDraft, warnings: RC.recipeWarnings(book, profs.map(p => p.id)), json: RC.exportRecipes(book), filter: this.recipeFilter, teachItems: this.recipeEditing && this.recipeEditing !== "new" ? LearnGM.itemsTeaching(this.recipeEditing) : [] });
     }
     if (this.page === "crafting") {
       const rules = Data.rules();
@@ -98,7 +99,8 @@ export class SetupApp extends Base {
       return GV.gatherPage({ rules, professions, types: D5.creatureTypeChoices(), status: GM.gatherStatus(rules), json: GM.exportGatherRules(rules), nodes: [...counts].map(([scene, count]) => ({ scene, count })), epoch: at ? new Date(at).toLocaleString(game.i18n?.lang) : "" });
     }
     if (this.page === "settings") {
-      const rows = S.ROWS.filter(r => r.tab === "settings" && r.type === "bool" && (!r.feature || F.on(r.feature))).map(r => ({ key: r.key, label: r.label ?? r.key, hint: r.hint ?? "", value: !!S.get(r.key) }));
+      const rows = S.ROWS.filter(r => r.tab === "settings" && (r.type === "bool" || r.type === "choice") && (!r.feature || F.on(r.feature)))
+        .map(r => (r.type === "choice" ? { key: r.key, label: r.label ?? r.key, hint: r.hint ?? "", value: String(S.get(r.key)), choices: r.choices ?? {} } : { key: r.key, label: r.label ?? r.key, hint: r.hint ?? "", value: !!S.get(r.key) }));
       return V.settingsPage({ rows });
     }
     if (this.page === "health") {
@@ -117,11 +119,20 @@ export class SetupApp extends Base {
     if (ioOpen) content.querySelector("details.wg-io")?.setAttribute("open", "");
     for (const form of content.querySelectorAll("form[data-form]")) form.addEventListener("submit", ev => { ev.preventDefault(); this.#submit(/** @type {HTMLFormElement} */ (form)); });
     for (const box of content.querySelectorAll("input[data-setting]")) box.addEventListener("change", () => this.#setting(/** @type {HTMLInputElement} */ (box)));
+    for (const sel of /** @type {NodeListOf<HTMLSelectElement>} */ (content.querySelectorAll("select[data-setting-choice]"))) {
+      sel.addEventListener("change", async () => {
+        const row = S.ROWS.find(r => r.key === sel.dataset.settingChoice && r.tab === "settings" && r.type === "choice");
+        if (row && row.choices && Object.hasOwn(row.choices, sel.value)) await S.set(row.key, sel.value);
+      });
+    }
     // Rank and recipe edits are kept as drafts so Add / Remove (and drops) don't lose typed values.
     content.querySelector("form[data-form=ranks]")?.addEventListener("input", ev => { this.rankDraft = this.#rankRows(/** @type {HTMLFormElement} */ (/** @type {HTMLElement} */ (ev.target).closest("form"))); });
     content.querySelector("form[data-form=gather]")?.addEventListener("input", ev => { this.gatherDraft = this.#gatherRules(/** @type {HTMLFormElement} */ (/** @type {HTMLElement} */ (ev.target).closest("form"))); });
     const recipeForm = /** @type {HTMLFormElement | null} */ (content.querySelector("form[data-form=recipe]"));
     recipeForm?.addEventListener("input", () => { this.recipeDraft = this.#recipeDraft(recipeForm); });
+    for (const box of /** @type {NodeListOf<HTMLInputElement>} */ (content.querySelectorAll("input[data-wg-keep]"))) {
+      box.addEventListener("change", async () => { await LearnGM.setKeep(String(box.dataset.wgKeep), box.checked); this.render(); });
+    }
     const filter = /** @type {HTMLSelectElement | null} */ (content.querySelector("[data-wg-recfilter]"));
     filter?.addEventListener("change", () => { this.recipeFilter = filter.value; this.render(); });
     for (const zone of /** @type {NodeListOf<HTMLElement>} */ (content.querySelectorAll("[data-wg-drop]"))) {
@@ -176,6 +187,9 @@ export class SetupApp extends Base {
       return this.render();
     }
     if (a === "recRefresh") return this.#refreshAll();
+    if (a === "recTeach") return this.#teachTo(id);
+    if (a === "teachMake") { if (await LearnGM.makeRecipeItem(id)) this.render(); return; }
+    if (a === "teachRemove") { if (await LearnGM.clearTeaches(String(target.dataset.item ?? ""))) this.render(); return; }
     if (a === "matAdd" || a === "matRemove") {
       const form = /** @type {HTMLFormElement | null} */ (this.element?.querySelector("form[data-form=recipe]")); if (!form) return;
       const d = this.#recipeDraft(form);
@@ -264,6 +278,11 @@ export class SetupApp extends Base {
       if (row) row[gm[3]] = { uuid: doc.uuid, name: doc.name, img: doc.img };
       this.gatherDraft = r; this.render(); return;
     }
+    if (where === "teach") {
+      if (!this.recipeEditing || this.recipeEditing === "new") return;
+      if (await LearnGM.setTeaches(data.uuid, this.recipeEditing)) this.render();
+      return;
+    }
     const form = /** @type {HTMLFormElement | null} */ (this.element?.querySelector("form[data-form=recipe]")); if (!form) return;
     const doc = await fromUuid(data.uuid).catch(() => null);
     if (!doc || doc.documentName !== "Item") { ui.notifications.warn(`${TITLE}: that item can't be read.`); return; }
@@ -292,6 +311,28 @@ export class SetupApp extends Base {
       if (idx) { m.name ||= idx.name ?? ""; m.img ||= idx.img ?? ""; }
     }
     return raw;
+  }
+
+  /**
+   * *Teach to…*: a DialogV2 with a tick per character (player characters first), then one learn request each (as the GM).
+   * @param {string} id
+   */
+  async #teachTo(id) {
+    const r = Data.recipes().list.find(x => x.id === id); if (!r) return;
+    const all = (game.actors?.contents ?? []).filter((/** @type {any} */ a) => a.type === "character")
+      .sort((/** @type {any} */ a, /** @type {any} */ b) => Number(b.hasPlayerOwner) - Number(a.hasPlayerOwner) || a.name.localeCompare(b.name));
+    const actors = all.map((/** @type {any} */ a) => ({ uuid: a.uuid, name: a.name, known: RC.knows(r, Data.known(a)), note: a.hasPlayerOwner ? "" : "no player" }));
+    let picked = [];
+    try {
+      picked = await foundry.applications.api.DialogV2.prompt({
+        window: { title: `Teach ${r.name} to…` }, classes: ["wg-dialog", ...UI_CLASSES], content: CV.teachToHTML({ recipe: r.name, actors }),
+        ok: { label: "Teach", callback: (/** @type {any} */ _e, /** @type {any} */ button) => [...button.form.querySelectorAll("input[name=teach]:checked:not(:disabled)")].map(x => x.value) }
+      }) ?? [];
+    } catch { return; }
+    const chosen = all.filter((/** @type {any} */ a) => picked.includes(a.uuid));
+    if (!chosen.length) return;
+    const n = await LearnGM.teachTo(r.id, chosen);
+    if (n) ui.notifications.info(`${TITLE}: teaching ${r.name} to ${n} character${n === 1 ? "" : "s"}.`);
   }
 
   /** Re-reads every recipe's result item (sequentially: one document each). */

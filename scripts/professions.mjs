@@ -23,6 +23,14 @@ export function setSetupOpener(fn) { openSetup = fn; }
 let openCrafting = null;
 /** @param {(actor: any, professionId: string, mode: "craft" | "recipes") => unknown} fn */
 export function setCraftingOpener(fn) { openCrafting = fn; }
+/**
+ * Recipe items (set by main.mjs when the Crafting feature is on): `rows(actor)` the carried recipe items' rows (learn-model.mjs
+ * `recipeItemRows`), `learn(actor, itemUuid)` asks the active GM's client to learn from one.
+ * @type {{ rows: (actor: any) => any[], learn: (actor: any, itemUuid: string) => unknown } | null}
+ */
+let recipeItemsApi = null;
+/** @param {{ rows: (actor: any) => any[], learn: (actor: any, itemUuid: string) => unknown }} api */
+export function setRecipeItems(api) { recipeItemsApi = api; }
 /** Opens the Gather dialog (set by main.mjs when the Gathering feature is on). @type {((actor: any, professionId: string) => unknown) | null} */
 let openGather = null;
 /** @param {(actor: any, professionId: string) => unknown} fn */
@@ -31,10 +39,12 @@ export function setGatherOpener(fn) { openGather = fn; }
 /**
  * What a profession button does, for the window and the toolkit sheet page alike: `wgCraft` (Craft / Recipes), `wgGather`, `wgSetup`,
  * `wgWindow` (the page's link to this window) and `wgComing` (a placeholder).
- * @param {any} actor @param {string} act @param {{ prof?: string, what?: string }} data the button's dataset
+ * `wgLearnItem` (learn from a carried recipe item; `data.item` is its UUID).
+ * @param {any} actor @param {string} act @param {{ prof?: string, what?: string, item?: string }} data the button's dataset
  */
 export function runAction(actor, act, data = {}) {
   const prof = String(data.prof ?? "");
+  if (act === "wgLearnItem") return recipeItemsApi?.learn(actor, String(data.item ?? ""));
   if (act === "wgCraft") return openCrafting?.(actor, prof, data.what === "recipes" ? "recipes" : "craft");
   if (act === "wgGather") return openGather?.(actor, prof);
   if (act === "wgSetup") return openSetup();
@@ -51,7 +61,10 @@ export const canView = actor => !!actor && (game.user?.isGM || actor.testUserPer
 
 /** The model for one actor (also `api.professionsOf(actor)`). @param {any} actor */
 export function viewOf(actor) {
-  return professionsView(D5.facts(actor), S.get("professionList"), S.get("rankTable"), { labels: D5.labels(), showUnlearned: !!S.get("showUnlearned"), isGM: !!game.user?.isGM, crafting: !!openCrafting, gathering: !!openGather });
+  const v = professionsView(D5.facts(actor), S.get("professionList"), S.get("rankTable"), { labels: D5.labels(), showUnlearned: !!S.get("showUnlearned"), isGM: !!game.user?.isGM, crafting: !!openCrafting, gathering: !!openGather });
+  let recipeItems = [];
+  try { recipeItems = recipeItemsApi?.rows(actor) ?? []; } catch (e) { log("recipe items", e); }
+  return { ...v, recipeItems, canUse: !!game.user?.isGM || !!actor?.isOwner };
 }
 
 const Base = RememberedWindow(foundry.applications.api.ApplicationV2, { moduleId: ID, key: "professions" });
@@ -75,6 +88,7 @@ export class ProfessionsApp extends Base {
       wgComing: ProfessionsApp.#act,
       wgCraft: ProfessionsApp.#act,
       wgGather: ProfessionsApp.#act,
+      wgLearnItem: ProfessionsApp.#act,
       wgSetup: () => openSetup()
     }
   };
@@ -103,7 +117,7 @@ export class ProfessionsApp extends Base {
 
   /** @this {ProfessionsApp} @param {PointerEvent} _event @param {HTMLElement} target */
   static #act(_event, target) {
-    runAction(this.actor, String(target?.dataset?.action ?? ""), { prof: target?.dataset?.prof, what: target?.dataset?.what });
+    runAction(this.actor, String(target?.dataset?.action ?? ""), { prof: target?.dataset?.prof, what: target?.dataset?.what, item: target?.dataset?.item });
   }
 }
 
@@ -137,7 +151,7 @@ export function refresh(actorId) {
 }
 
 /** Paths whose change can change an actor's professions. */
-const ACTOR_PATHS = ["system.tools", "system.attributes.prof", "system.details.level", "name"];
+const ACTOR_PATHS = ["system.tools", "system.attributes.prof", "system.details.level", "name", `flags.${ID}.recipes`];
 
 /** Hooks that redraw an open window (hot hooks: bail first when no window is open for the actor). */
 export function registerHooks() {
@@ -152,7 +166,7 @@ export function registerHooks() {
   const fromItem = (/** @type {any} */ doc) => {
     const actor = doc?.parent;
     if (!actor || !OPEN.has(actor.id)) return;
-    if (doc.documentName === "Item" && !["class", "subclass", "background", "race", "feat"].includes(doc.type)) return;
+    if (doc.documentName === "Item" && !["class", "subclass", "background", "race", "feat"].includes(doc.type) && !doc.flags?.[ID]?.teaches) return;
     refresh(actor.id);
   };
   for (const h of ["createItem", "updateItem", "deleteItem", "createActiveEffect", "updateActiveEffect", "deleteActiveEffect"]) Hooks.on(h, fromItem);

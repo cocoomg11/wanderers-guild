@@ -51,6 +51,8 @@ test("setup shell and pages", () => {
   const ranks = SV.ranksPage({ rows: defaultRanks().rows, rarities: RARITIES });
   assert.equal((ranks.match(/name="bonus\.\d+"/g) ?? []).length, 5);
   assert.ok(SV.settingsPage({ rows: [{ key: "showUnlearned", label: "L", hint: "H", value: true }] }).includes(`data-setting="showUnlearned" checked`));
+  const ch = SV.settingsPage({ rows: [{ key: "undiscoveredRecipes", label: "L", hint: "H <i>", value: "hide", choices: { show: "Show", hide: "Hide <x>" } }] });
+  assert.ok(ch.includes(`data-setting-choice="undiscoveredRecipes"`) && ch.includes(`<option value="hide" selected>Hide &lt;x&gt;</option>`) && ch.includes("H &lt;i&gt;"));
   assert.ok(SV.healthPage({ report: [{ title: "T", lines: [{ level: "ok", text: "fine" }] }] }).includes("fine"));
   assert.ok(SV.dataPage({ rows: [{ key: "professions", label: "P", count: 0, ticked: true, text: "none" }] }).includes("disabled"));
 });
