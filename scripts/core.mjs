@@ -9,7 +9,7 @@ import { ID, TITLE, HOOKS } from "./const.mjs";
 import { PROFESSIONS_VERSION } from "./professions-model.mjs";
 import { defaultRanks } from "./ranks-model.mjs";
 import { RECIPES_VERSION } from "./recipes-model.mjs";
-import { defaultRules, CHOICES, HELPERS_MAX } from "./craft-model.mjs";
+import { defaultRules, CHOICES, HELPERS_MAX, BATCH_LIMIT } from "./craft-model.mjs";
 import { defaultGatherRules, DAYS_MAX } from "./gather-model.mjs";
 
 /**
@@ -69,8 +69,9 @@ const DAYS = { type: /** @type {const} */ ("number"), int: true, min: 1, max: DA
  * - `learnFromItem` { actor, item }: the owner (or a GM) uses a recipe item; `item` must be an item embedded on that actor. The leader
  *   reads the recipe from the item's own flag (never from the payload), re-checks (learn-model.mjs `assessLearn`), learns, then uses
  *   one item up unless it is set to keep.
- * - `craft` { actor, recipe, roll, helpers }: the owner (or a GM) after rolling the tool check; `roll` is the roll's chat message,
- *   which the leader reads (author, actor, our flag, age, not used before) instead of trusting a total.
+ * - `craft` { actor, recipe, roll, helpers, qty? }: the owner (or a GM) after rolling the tool check; `roll` is the roll's chat message,
+ *   which the leader reads (author, actor, our flag, age, not used before) instead of trusting a total. `qty` (0.5, 1–BATCH_LIMIT,
+ *   missing = 1) is the batch size; the leader clamps it to the rules' `batchMax` (`clampBatch`) and re-assesses with it.
  * - `craftDecide` { message, choice }: GM only; a choice on a pending craft card.
  * - `gather` { actor, profession, roll, days, node? | scene? | token? }: the owner (or a GM) after rolling the gathering check; exactly
  *   one of node (a Note's UUID), scene (gather in that scene's area) or token (harvest that creature); `days` = days in this journey
@@ -83,7 +84,7 @@ export const REQUESTS = defineRequests({
   learnRecipe: { fields: { actor: ACTOR, recipe: RECIPE_ID } },
   forgetRecipe: { fields: { actor: ACTOR, recipe: RECIPE_ID }, from: "gm" },
   learnFromItem: { fields: { actor: ACTOR, item: { type: "uuid", max: 340 } } },
-  craft: { fields: { actor: ACTOR, recipe: RECIPE_ID, roll: { type: "id" }, helpers: { type: "number", int: true, min: 0, max: HELPERS_MAX } } },
+  craft: { fields: { actor: ACTOR, recipe: RECIPE_ID, roll: { type: "id" }, helpers: { type: "number", int: true, min: 0, max: HELPERS_MAX }, qty: { type: "number", int: true, min: 1, max: BATCH_LIMIT, optional: true } } },
   craftDecide: { fields: { message: { type: "id" }, choice: { type: "string", oneOf: CHOICES } }, from: "gm" },
   gather: { fields: { actor: ACTOR, profession: RECIPE_ID, roll: { type: "id" }, days: DAYS, node: { ...ACTOR, optional: true }, scene: { type: "id", optional: true }, token: { ...ACTOR, optional: true } } },
   gatherReset: { fields: { days: { ...DAYS, optional: true } }, from: "gm" }

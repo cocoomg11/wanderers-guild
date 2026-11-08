@@ -15,7 +15,7 @@ import { versioned } from "../vendor/wanderers-core/index.mjs";
 import { ID_RE, idFrom, uniqueId } from "./professions-model.mjs";
 import { RARITY_KEYS } from "./ranks-model.mjs";
 
-export const RECIPES_VERSION = 2;
+export const RECIPES_VERSION = 3;
 /**
  * How a recipe is learned (0.4, `recipeBook` v2; v1 recipes read as "rank"): "rank" = a player learns it when their rank allows
  * (the Recipes page's Learn), "item" = only by using a recipe item that teaches it (or a GM teaching it), "gm" = only a GM teaches it.
@@ -52,6 +52,8 @@ export const DENOMINATIONS = Object.freeze(["pp", "gp", "ep", "sp", "cp"]);
  * @typedef {{ value: number, denomination: string }} Price
  * @typedef {{ uuid: string, name: string, img: string, type: string, rarity: string, price: Price | null, qty: number }} RecipeResult
  * @typedef {{ uuid: string, name: string, img: string, qty: number }} Material
+ * @typedef {{ qty: number, uuid: string, name: string, img: string, type: string, rarity: string }} Better `qty` extra results (0 =
+ *   none) and/or a different item (`uuid` "" = the normal result); both empty = no better result for this recipe
  * @typedef {object} Recipe
  * @property {string} id
  * @property {string} name
@@ -65,6 +67,7 @@ export const DENOMINATIONS = Object.freeze(["pp", "gp", "ep", "sp", "cp"]);
  * @property {number | null} cost in gold pieces
  * @property {boolean} auto known by everyone with the profession
  * @property {"rank" | "item" | "gm"} learn how it is learned (LEARN_ROUTES)
+ * @property {Better} better the better result (0.5, `recipeBook` v3): what a roll of the DC plus the rules' margin makes
  * @property {string} notes shown to players
  * @typedef {{ v: number, list: Recipe[] }} RecipeBook
  * @typedef {{ v: number, ids: string[] }} Known
@@ -103,6 +106,23 @@ function cleanResult(raw) {
   };
 }
 
+/** An empty better result. @returns {Better} */
+export const noBetter = () => ({ qty: 0, uuid: "", name: "", img: "", type: "", rarity: "" });
+
+/** The better result cleaned (0.5). @param {unknown} raw @returns {Better} */
+export function cleanBetter(raw) {
+  const o = /** @type {any} */ (raw);
+  if (!o || typeof o !== "object") return noBetter();
+  const u = uuid(o.uuid);
+  return {
+    qty: int(o.qty, 0, QTY_MAX, 0), uuid: u, name: u ? line(o.name, RECIPE_NAME_MAX) : "", img: u ? img(o.img) : "",
+    type: u ? line(o.type, 32).replace(/[^A-Za-z0-9]/g, "") : "", rarity: u && RARITY_KEYS.includes(o.rarity) ? o.rarity : ""
+  };
+}
+
+/** Whether a recipe has a better result at all. @param {{ better?: Better }} r */
+export const hasBetter = r => !!r.better && (r.better.qty > 0 || !!r.better.uuid);
+
 /** One material, or null (neither a UUID nor a name). @param {unknown} raw @returns {Material | null} */
 export function cleanMaterial(raw) {
   const o = /** @type {any} */ (raw);
@@ -137,6 +157,7 @@ export function cleanRecipe(raw) {
     cost: optNum(o.cost, 0, COST_MAX),
     auto: o.auto === true,
     learn: LEARN_ROUTES.includes(o.learn) ? o.learn : "rank",
+    better: cleanBetter(o.better),
     notes: String(o.notes ?? "").replace(/\r\n?/g, "\n").trim().slice(0, RECIPE_NOTES_MAX)
   };
 }
@@ -149,8 +170,8 @@ export function cleanRecipe(raw) {
 export const normalizeRecipes = versioned({
   version: RECIPES_VERSION,
   empty: () => ({ v: RECIPES_VERSION, list: [] }),
-  // v1 → v2: recipes gain `learn` (cleanRecipe reads a missing one as "rank").
-  upgrades: { 1: s => s },
+  // v1 → v2: recipes gain `learn` (cleanRecipe reads a missing one as "rank"). v2 → v3: recipes gain `better` (missing = none).
+  upgrades: { 1: s => s, 2: s => s },
   clean: s => {
     const taken = new Set();
     /** @type {Recipe[]} */
@@ -255,6 +276,8 @@ export function recipeWarnings(book, professionIds) {
   if (none.length) out.push(`No profession picked for: ${few(none)}.`);
   if (gone.length) out.push(`The profession no longer exists for: ${few(gone)}.`);
   if (noItem.length) out.push(`No result item for: ${few(noItem)} (crafting them makes nothing).`);
+  const sameBetter = book.list.filter(r => r.better.uuid && r.better.uuid === r.result.uuid && r.better.qty === 0).map(r => r.name);
+  if (sameBetter.length) out.push(`The better result is the normal item with no extra quantity for: ${few(sameBetter)} (a better roll changes nothing).`);
   return out;
 }
 

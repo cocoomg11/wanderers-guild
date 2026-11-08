@@ -30,7 +30,7 @@ export const TIME_NOTE = "in game, for reference: the calendar is not advanced";
 
 /**
  * @typedef {ReturnType<typeof import("./craft-model.mjs").assess>} Assessed
- * @typedef {Assessed & { group: string, img: string, notes: string, qty: number, toolTotal: string, source: string, route?: string, learnState?: string, hasItem?: boolean, itemUuid?: string, itemName?: string }} Row
+ * @typedef {Assessed & { group: string, img: string, notes: string, qty: number, betterText?: string, toolTotal: string, source: string, route?: string, learnState?: string, hasItem?: boolean, itemUuid?: string, itemName?: string }} Row
  *   `learnState` (learn-model.mjs `learnState`): known, learn, item, teach, rank, needsItem, gm; `itemUuid`: a carried recipe item
  *   that teaches it
  * @typedef {object} CraftView
@@ -49,6 +49,8 @@ export const TIME_NOTE = "in game, for reference: the calendar is not advanced";
  * @property {string | null} selected
  * @property {number} helpers
  * @property {number} helpersMax
+ * @property {number} [batch] the batch size asked for (0.5; 1 = one at a time)
+ * @property {number | null} [betterMargin] the rules' better-result margin (null = off)
  * @property {boolean} helperDivides
  * @property {number | null} hoursPerDay
  * @property {string} failText
@@ -99,14 +101,14 @@ function detailHTML(v, r) {
   const head = `<section class="wg-box"><div class="wg-res">
     ${itemSlot({ img: r.img || "icons/svg/item-bag.svg", name: r.name, rarity: q, size: "lg", count: r.qty })}
     <div class="wg-grow"><b class="wg-pname wc-q-text" data-quality="${esc(q)}">${esc(r.name)}</b>
-      <span class="wg-dim">${esc(r.rarityLabel)}${r.consumable ? " · consumable" : ""}${r.qty > 1 ? ` · makes ${r.qty}` : ""}${r.source === "everyone" ? " · known by everyone with the profession" : ""}</span>
+      <span class="wg-dim">${esc(r.rarityLabel)}${r.consumable ? " · consumable" : ""}${(r.makes ?? r.qty) > 1 ? ` · makes ${r.makes ?? r.qty}` : ""}${(r.batch ?? 1) > 1 ? ` (batch of ${r.batch})` : ""}${r.source === "everyone" ? " · known by everyone with the profession" : ""}</span>
       ${r.price !== null ? `<span class="wg-dim">Value ${v.money(r.price)} · ${esc(v.economyNote)}</span>` : ""}</div>
     <span class="wg-dk ${st.cls}"><i aria-hidden="true"></i>${esc(st.label)}</span></div>
     ${r.notes ? `<p class="wg-note wg-pad">${esc(r.notes)}</p>` : ""}</section>`;
   const mats = r.materials.length
-    ? r.materials.map(m => `<li class="wg-mat"><span class="wg-nm">${esc(m.name)}</span><b class="${m.ok ? "wg-pos" : "wg-neg"}">${m.have} / ${m.need}</b></li>`).join("")
+    ? r.materials.map(m => `<li class="wg-mat"><span class="wg-nm">${esc(m.name)}${(r.batch ?? 1) > 1 ? ` <span class="wg-dim">(${m.each ?? m.need} each)</span>` : ""}</span><b class="${m.ok ? "wg-pos" : "wg-neg"}">${m.have} / ${m.need}</b></li>`).join("")
     : `<li class="wg-mat"><span class="wg-dim">No materials listed.</span></li>`;
-  const uses = usesNotice(r.materials, { fail: v.failRule ?? "lose", charge: r.charge > 0, approval: v.approval });
+  const uses = usesNotice(r.materials, { fail: v.failRule ?? "lose", charge: r.charge > 0, approval: v.approval, batch: r.batch ?? 1 });
   const time = r.hours === null ? `<span class="wg-dim">not set (Crafting rules)</span>`
     : `${esc(hoursText(r.hours, v.hoursPerDay))}${r.timeNotes.length ? ` <span class="wg-dim">(${esc(r.timeNotes.join(", "))})</span>` : ""} <span class="wg-dim">· ${esc(TIME_NOTE)}</span>`;
   const rankLine = !r.rarity ? `Any <span class="wg-dim">(mundane)</span>`
@@ -116,16 +118,29 @@ function detailHTML(v, r) {
     <li><span>Tool</span><b>${r.tool ? `<i class="wg-pm ${r.tool.mult >= 2 ? "e" : "f"}" aria-hidden="true"></i> ${esc(r.tool.label)}` : `<span class="wg-neg">not proficient</span>`}</b></li>
     <li><span>Rank</span><b>${rankLine}</b></li>
     <li><span>Check</span><b>${check}</b></li>
-    <li><span>Time</span><b>${time}</b></li></ul></section>`;
+    <li><span>Time</span><b>${time}</b></li>${betterLine(v, r)}</ul></section>`;
   const cost = `<section class="wg-box"><h4>Cost<span class="r">${esc(v.economyNote)}</span></h4><ul class="wg-kv wg-pad">
     <li><span>Item value</span><b>${r.price === null ? `<span class="wg-dim">no price</span>` : v.money(r.price)}</b></li>
     <li><span>Coin cost</span><b>${r.cost === null ? `<span class="wg-dim">not set (Crafting rules)</span>` : `${v.money(r.cost)}${r.charge ? ` <span class="${r.coinOk ? "wg-dim" : "wg-neg"}">· paid from your coin</span>` : ` <span class="wg-dim">· not charged</span>`}`}</b></li>
     <li><span>On a failure</span><b class="wg-dim">${esc(v.failText)}</b></li></ul></section>`;
+  const bmax = r.batchMax ?? 1;
+  const batch = bmax > 1 ? `<label class="wg-lab" for="wg-batch">How many</label><input id="wg-batch" class="wg-num" type="number" min="1" max="${bmax}" step="1" value="${r.batch ?? 1}" data-wg-batch title="${esc(`One check for the whole batch (up to ${bmax}); materials, coin and time are multiplied.`)}">` : "";
   const helpers = v.helpersMax > 0 ? `<label class="wg-lab" for="wg-helpers">Helpers</label><input id="wg-helpers" class="wg-num" type="number" min="0" max="${v.helpersMax}" step="1" value="${v.helpers}" data-wg-helpers>${v.helperDivides ? "" : `<span class="wg-dim">(time not divided)</span>`}` : "";
   const why = r.problems.length ? `<span class="wg-neg">${esc(r.problems[0])}</span>` : `<span class="wg-dim">One ${esc(r.tool?.label ?? "tool")} check${v.approval ? "; the GM approves the result" : r.dc === null ? "; no DC is set, so the roll crafts it" : ""}.</span>`;
   const can = r.canCraft && !v.noGM && !v.locked;
-  const foot = `<footer class="wg-foot">${helpers}<div class="wg-grow wg-footmsg">${why}<p class="wg-uses" role="note" data-wg-uses>${esc(uses)}</p></div><button type="button" class="wg-gbtn big pri" data-action="wgCraftNow" data-id="${esc(r.id)}" title="${esc(uses)}"${can ? "" : " disabled"}>${svg(ICONS.hammer.d)}Craft</button></footer>`;
+  const foot = `<footer class="wg-foot">${batch}${helpers}<div class="wg-grow wg-footmsg">${why}<p class="wg-uses" role="note" data-wg-uses>${esc(uses)}</p></div><button type="button" class="wg-gbtn big pri" data-action="wgCraftNow" data-id="${esc(r.id)}" title="${esc(uses)}"${can ? "" : " disabled"}>${svg(ICONS.hammer.d)}Craft</button></footer>`;
   return `${head}<div class="wg-two"><section class="wg-box"><h4>Materials<span class="r">in the inventory: have / need</span></h4><ul class="wg-list">${mats}</ul></section>${req}</div>${cost}${foot}`;
+}
+
+/**
+ * The Requirements box's *Better result* row (0.5): what a roll of DC + margin makes, or nothing when the recipe has no better
+ * result or the rules give no margin.
+ * @param {CraftView} v @param {Row} r
+ */
+function betterLine(v, r) {
+  if (!r.betterText) return "";
+  const how = r.betterAt !== null && r.betterAt !== undefined ? `on ${r.betterAt} or more` : r.dc === null ? `<span class="wg-dim">needs a DC</span>` : `<span class="wg-dim">no margin set (Crafting rules)</span>`;
+  return `<li><span>Better result</span><b>${esc(r.betterText)}${(r.batch ?? 1) > 1 ? ` <span class="wg-dim">(for each of the batch)</span>` : ""} · ${how}</b></li>`;
 }
 
 /** The Craft page. @param {CraftView} v */
@@ -206,6 +221,10 @@ export const craftWindowHTML = v => (v.mode === "recipes" ? recipesPageHTML(v) :
  * @property {string[]} used what was used up (plain text)
  * @property {string} coin coin markup, or ""
  * @property {boolean} approvalAsked the GM was asked because of the approval switch (the only reason a card waits)
+ * @property {number} [batch] how many were crafted in one go (0.5)
+ * @property {boolean} [better] the roll made the better result
+ * @property {string} [betterName] the better item's name, when it replaced the normal result
+ * @property {number | null} [betterAt] the total the better result needed (DC + margin), when there was one
  */
 
 const STATE_TEXT = { pending: "Waiting for the GM", done: "Crafted", failed: "Failed", refused: "Refused", error: "Not crafted" };
@@ -214,7 +233,10 @@ const STATE_TEXT = { pending: "Waiting for the GM", done: "Crafted", failed: "Fa
 export function cardHTML(c) {
   const q = qualityOf(c.rarity);
   const noDc = c.dc === null && c.state === "done" ? ` <span class="wg-dim">(no DC set: crafted)</span>` : "";
-  const roll = c.total === null ? "" : `<p class="wg-cline"><span>${esc(c.toolLabel)} check</span><b>${c.total}${c.dc === null ? "" : ` vs DC ${c.dc}`}${noDc}</b></p>`;
+  const atBetter = c.betterAt !== null && c.betterAt !== undefined && c.state !== "done" && c.state !== "failed" ? ` <span class="wg-dim">(better result on ${c.betterAt})</span>` : "";
+  const roll = c.total === null ? "" : `<p class="wg-cline"><span>${esc(c.toolLabel)} check</span><b>${c.total}${c.dc === null ? "" : ` vs DC ${c.dc}`}${noDc}${atBetter}</b></p>`;
+  const batch = (c.batch ?? 1) > 1 ? `<p class="wg-cline"><span>Batch</span><b>${c.batch} in one check</b></p>` : "";
+  const better = c.better && c.state === "done" ? `<p class="wg-cline wg-better"><span>Better result</span><b>${c.betterName ? `${esc(c.betterName)} ×${c.qty}` : `${c.qty} made`}${c.betterAt !== null && c.betterAt !== undefined ? ` <span class="wg-dim">(${c.betterAt} or more)</span>` : ""}</b></p>` : "";
   const time = c.timeText ? `<p class="wg-cline"><span>Time</span><b>${esc(c.timeText)} <span class="wg-dim">(${esc(TIME_NOTE)})</span></b></p>` : "";
   const used = c.used.length ? `<p class="wg-cline"><span>Used up</span><b>${esc(c.used.join(", "))}</b></p>` : "";
   const coin = c.coin ? `<p class="wg-cline"><span>Coin</span><b>${c.coin}</b></p>` : "";
@@ -228,7 +250,7 @@ export function cardHTML(c) {
   return `<div class="${UI_CLASSES.join(" ")} wg-chat wg-chat-${esc(c.state)}">
     <header class="wg-chead">${itemSlot({ img: c.img || "icons/svg/item-bag.svg", name: c.recipeName, rarity: q, count: c.qty })}
       <div><b class="wc-q-text" data-quality="${esc(q)}">${esc(c.recipeName)}</b><span class="wg-dim">${esc(c.actorName)} · ${esc(STATE_TEXT[c.state] ?? c.state)}</span></div></header>
-    ${roll}${time}${used}${coin}${reason}${buttons}</div>`;
+    ${roll}${batch}${better}${time}${used}${coin}${reason}${buttons}</div>`;
 }
 
 // ------------------------------------------------------------------ learn card

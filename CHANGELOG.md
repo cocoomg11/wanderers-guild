@@ -2,6 +2,47 @@
 
 All notable changes to Wanderer's Guild. Versions follow the `version` in `module.json`.
 
+## 0.5.0 (2026-11-08)
+
+Craft outcomes and batches: a better result for a high roll, and crafting several in one check. Both are off until the GM sets a number (no figures ship).
+
+### Added
+
+- **Better result** (Crafting rules › *Better result margin*, and per recipe in the editor's *Better result* box): *Extra made* (more of the normal item) and/or a different item dropped on the box, made instead of the normal one. A success that reaches the DC plus the margin makes it; the card says *Better result*. No DC, no margin or a recipe without one: never.
+- **Batches** (Crafting rules › *Batches*: the most in one batch): the Craft page gets **How many**. One tool check for the batch; materials, coin cost and time × the batch; the notice next to Craft lists the multiplied use-up (*A batch of 3 uses up: 9× Bar …*). A failure uses up the batch's materials per *On a failed check*. A better roll applies to every craft in the batch ((quantity + extra) × batch, of the better item when set).
+- The Craft page's Requirements box shows the better result and the roll it needs; Materials show "(N each)" for a batch.
+- Health: better result items that can't be found (warn), *Better results* and *Batches* state (info), a better result that is the normal item with no extra (warn).
+- API: `crafting.assess(actor, recipeId, { batch })`. Hook `wanderers-guild.crafted` adds `better` and `batch`.
+
+### Changed
+
+- `recipeBook` is version 3 (each recipe has `better` `{ qty, uuid, name, img, type, rarity }`; version 2 and 1 read with none); `craftRules` is version 2 (`betterMargin`, `batchMax`; version 1 reads with both off). Old Import / export files still import.
+- The `craft` request takes an optional `qty` (whole number 1–50, missing = 1); the active GM's client cuts it to the rules' *Batches* (never raises it) and assesses again with it. Craft cards store `batch`, `betterAt` and `better` (missing = 1 / none).
+
+### Under the hood
+
+- craft-model.mjs: `clampBatch`, `assess({ batch })` (materials `need` = per-craft × batch, plus `each`; hours, cost and charge × batch; `makes`, `batch`, `batchMax`, `betterAt`), `isBetter`, `resultPlan`, `betterText`, `craftedPayload`; `usedList(materials, times)`; `usesNotice({ batch })`. recipes-model.mjs: `cleanBetter`, `noBetter`, `hasBetter`.
+- The leader decides a better result only from the roll it read and its own assessment (never a payload field); roll verification is unchanged.
+- No skill-ups and no trainers (not in scope).
+
+### Untested in Foundry
+
+Check on Foundry 14.370 with dnd5e 6.0.6, as a player and as the GM:
+
+- [ ] A world from 0.4: recipes and rules load unchanged; the editor shows an empty *Better result*; the rules page shows empty *Better result margin* and *Batches*; no *How many* on the Craft page.
+- [ ] Recipe editor: drop an item on *Better result*: its name, rarity and type show; Save; reopen: kept. *Refresh from items* refreshes it too. Clear the UUID: the normal item again.
+- [ ] Margin 5, DC 12, a recipe with *Extra made* 1: a roll of 17+ makes quantity + 1 and the card says *Better result*; 12–16 makes the normal quantity; under 12 fails.
+- [ ] Same with a better item: the better item is made instead (a stack of a consumable or loot grows; else a new item), card shows its name and picture.
+- [ ] No DC anywhere: never a better result; the Requirements row says "needs a DC".
+- [ ] *Batches* 4: *How many* 1–4; 3 multiplies the materials, the notice, the time and the coin cost; Craft disabled when the materials don't cover the batch.
+- [ ] Batch of 3 success: 3 × quantity made, 3 × materials used, 3 × coin paid (with *Take it from the crafter's coin*). Batch failure with *Used up*: 3 × materials gone; with *Kept*: nothing.
+- [ ] Lower *Batches* to 2 while a player's window shows 3 and they craft: the GM's client makes 2 and uses up 2 (card *2 in one check*).
+- [ ] A batch of a weapon: one item with quantity N.
+- [ ] *GM approves each craft* on: the pending card says "better result on N"; Approve makes the better result when the roll reached it; the batch is kept.
+- [ ] A player's roll is still checked (situational bonus refused) with batches and better results on.
+- [ ] Health: delete the better item: *Better result item not found* (warn); a better roll then errors with nothing used up.
+- [ ] `wanderers-guild.crafted` carries `better` and `batch`.
+
 ## 0.4.0 (2026-11-08)
 
 Recipe discovery and learning: three ways to learn a recipe, recipe items, teaching several characters at once, and a learn card.

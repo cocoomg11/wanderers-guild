@@ -24,10 +24,11 @@ export function context(actor) {
 /**
  * One recipe assessed in a context.
  * @param {ReturnType<typeof context>} ctx @param {import("./recipes-model.mjs").Recipe} recipe @param {number} [helpers]
+ * @param {number} [batch] how many in one go (clamped to the rules' batchMax inside `assess`)
  */
-export function assessIn(ctx, recipe, helpers = 0) {
+export function assessIn(ctx, recipe, helpers = 0, batch = 1) {
   const profession = ctx.professions.find(p => p.id === recipe.profession) ?? null;
-  return assess({ ...ctx, recipe, profession, helpers });
+  return assess({ ...ctx, recipe, profession, helpers, batch });
 }
 
 /** The section a recipe is listed under: its own, else its item type. @param {import("./recipes-model.mjs").Recipe} r */

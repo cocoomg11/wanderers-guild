@@ -261,6 +261,10 @@ export class SetupApp extends Base {
     const stored = Data.recipes().list.find(r => r.id === d.id);
     const snap = this.snaps.get(d.result.uuid) ?? (stored?.result.uuid === d.result.uuid ? stored?.result : null);
     if (snap) d.result = /** @type {any} */ ({ ...snap, uuid: d.result.uuid, qty: d.result.qty });
+    // The better item's snapshot (0.5): from a drop, or the stored recipe when its UUID is unchanged.
+    const b = /** @type {any} */ (d).better ?? { qty: 0, uuid: "" };
+    const bs = b.uuid ? this.snaps.get(b.uuid) ?? (stored && stored.better.uuid === b.uuid ? stored.better : null) : null;
+    /** @type {any} */ (d).better = bs ? { ...bs, uuid: b.uuid, qty: b.qty } : { qty: b.qty, uuid: b.uuid };
     return d;
   }
 
@@ -289,6 +293,7 @@ export class SetupApp extends Base {
     const snap = D5.itemSnapshot(doc); this.snaps.set(snap.uuid, snap);
     const d = this.#recipeDraft(form);
     if (where === "result") { d.result = /** @type {any} */ ({ ...snap, qty: d.result.qty }); if (!d.name) d.name = snap.name; }
+    else if (where === "better") { /** @type {any} */ (d).better = { ...snap, qty: /** @type {any} */ (d).better?.qty ?? 0 }; }
     else if (where === "mat.new") { if (d.materials.length < RC.MATERIALS_MAX) d.materials.push(/** @type {any} */ ({ uuid: snap.uuid, name: snap.name, img: snap.img, qty: 1 })); }
     else { const i = Number(where.split(".")[1]); if (d.materials[i]) Object.assign(d.materials[i], { uuid: snap.uuid, name: d.materials[i].name || snap.name, img: snap.img }); }
     this.recipeDraft = d; this.render();
@@ -304,6 +309,12 @@ export class SetupApp extends Base {
       const snap = this.snaps.get(raw.result.uuid) ?? (doc?.documentName === "Item" ? D5.itemSnapshot(doc) : null);
       if (snap) raw.result = { ...snap, qty: raw.result.qty };
       else if (!raw.result.name) ui.notifications.warn(`${TITLE}: the result item ${raw.result.uuid} can't be read; saved without its details.`);
+    }
+    if (raw.better?.uuid) {
+      const doc = this.snaps.has(raw.better.uuid) ? null : await fromUuid(raw.better.uuid).catch(() => null);
+      const snap = this.snaps.get(raw.better.uuid) ?? (doc?.documentName === "Item" ? D5.itemSnapshot(doc) : null);
+      if (snap) raw.better = { ...snap, qty: raw.better.qty ?? 0 };
+      else if (!raw.better.name) ui.notifications.warn(`${TITLE}: the better result item ${raw.better.uuid} can't be read; saved without its details.`);
     }
     for (const m of raw.materials ?? []) {
       if (!m.uuid) continue;
@@ -343,7 +354,9 @@ export class SetupApp extends Base {
       if (!r.result.uuid) continue;
       const doc = await fromUuid(r.result.uuid).catch(() => null);
       if (doc?.documentName !== "Item") continue;
-      const up = RC.upsertRecipe(book, { ...r, result: { ...D5.itemSnapshot(doc), qty: r.result.qty } });
+      let better = r.better;
+      if (better.uuid) { const bd = await fromUuid(better.uuid).catch(() => null); if (bd?.documentName === "Item") better = { ...D5.itemSnapshot(bd), qty: better.qty }; }
+      const up = RC.upsertRecipe(book, { ...r, result: { ...D5.itemSnapshot(doc), qty: r.result.qty }, better });
       if (up.list) { book = up.list; n += 1; }
     }
     await Data.saveRecipes(book);

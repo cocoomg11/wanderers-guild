@@ -23,9 +23,14 @@
  */
 import { versioned } from "../vendor/wanderers-core/index.mjs";
 import { RARITY_KEYS, rankFor, rarityLabel, signed } from "./ranks-model.mjs";
-import { recipeRarity, knows, optNum, DC_MIN, DC_MAX, HOURS_MAX, COST_MAX } from "./recipes-model.mjs";
+import { recipeRarity, knows, optNum, hasBetter, DC_MIN, DC_MAX, HOURS_MAX, COST_MAX } from "./recipes-model.mjs";
 
-export const RULES_VERSION = 1;
+/** 2 (0.5): `betterMargin` and `batchMax` (v1 reads with both "not set"). */
+export const RULES_VERSION = 2;
+/** The most a batch can ever hold (the rules' `batchMax` is capped here, and so is the `craft` request's `qty`). */
+export const BATCH_LIMIT = 50;
+/** The better-result margin's range (above the DC). */
+export const MARGIN_MAX = DC_MAX;
 export const RULES_FORMAT = "wanderers-guild.craftRules";
 export const PCT_MAX = 1000;
 export const HELPERS_MAX = 20;
@@ -58,13 +63,16 @@ export const BOOK_VALUES = Object.freeze({ pp: 1000, gp: 100, ep: 50, sp: 10, cp
  * @property {keyof typeof FAIL_RULES} failMaterials
  * @property {boolean} chargeCoin take the coin cost from the crafter
  * @property {Record<string, number>} rankTime rank bonus → time percentage
+ * @property {number | null} betterMargin a roll of at least DC + this makes the recipe's better result (null = off)
+ * @property {number | null} batchMax the most crafted in one batch (null = batches off: one at a time)
  */
 
 /** A fresh rules object: nothing set. @returns {CraftRules} */
 export const defaultRules = () => ({
   v: RULES_VERSION, timeHours: null, timePerGp: null, rounding: "hour", hoursPerDay: null, materialPct: null,
   byRarity: Object.fromEntries(RARITY_KEYS.map(k => [k, { hours: null, cost: null, dc: null }])),
-  consumablePct: 100, dc: null, helpersMax: 0, helperDivides: false, failMaterials: "lose", chargeCoin: false, rankTime: {}
+  consumablePct: 100, dc: null, helpersMax: 0, helperDivides: false, failMaterials: "lose", chargeCoin: false, rankTime: {},
+  betterMargin: null, batchMax: null
 });
 
 /** @param {unknown} v */
@@ -80,6 +88,8 @@ const intOr = (v, min, max, dflt) => { const n = optNum(v, min, max); return n =
 export const normalizeRules = versioned({
   version: RULES_VERSION,
   empty: defaultRules,
+  // v1 → v2: `betterMargin` and `batchMax` (missing = not set).
+  upgrades: { 1: o => o },
   clean: o => {
     const d = defaultRules();
     const byRarity = Object.fromEntries(RARITY_KEYS.map(k => {
@@ -106,7 +116,9 @@ export const normalizeRules = versioned({
       helperDivides: o?.helperDivides === true,
       failMaterials: Object.hasOwn(FAIL_RULES, o?.failMaterials) ? o.failMaterials : d.failMaterials,
       chargeCoin: o?.chargeCoin === true,
-      rankTime
+      rankTime,
+      betterMargin: (() => { const n = optNum(o?.betterMargin, 0, MARGIN_MAX); return n === null ? null : Math.round(n); })(),
+      batchMax: (() => { const n = optNum(o?.batchMax, 1, BATCH_LIMIT); return n === null || Math.round(n) < 2 ? null : Math.round(n); })()
     };
   }
 });
@@ -122,6 +134,8 @@ export function rulesStatus(r) {
   (r.materialPct !== null ? set : unset).push("coin cost from the item's price");
   (anyRarity("hours") || anyRarity("cost") ? set : unset).push("time and cost by rarity");
   (r.dc !== null || anyRarity("dc") ? set : unset).push("a DC");
+  (r.betterMargin !== null ? set : unset).push("a better-result margin");
+  (r.batchMax !== null ? set : unset).push("batches");
   return { set, unset };
 }
 
@@ -301,6 +315,17 @@ export function craftTool(p, facts) {
 }
 
 /**
+ * How many one craft makes in a batch: a whole number from 1 to the rules' `batchMax` (1 when batches are off). Never more than
+ * asked, so a clamp only ever makes (and spends) less.
+ * @param {unknown} n @param {CraftRules} rules
+ */
+export function clampBatch(n, rules) {
+  const max = rules.batchMax ?? 1;
+  const v = Math.floor(Number(n));
+  return Number.isFinite(v) ? Math.min(max, Math.max(1, v)) : 1;
+}
+
+/**
  * Everything about crafting one recipe now, from plain facts: the numbers, what's missing and whether it can be crafted.
  * @param {object} a
  * @param {import("./recipes-model.mjs").Recipe} a.recipe
@@ -314,11 +339,13 @@ export function craftTool(p, facts) {
  * @param {CoinValues} a.values the prices' economy (book or world)
  * @param {CoinValues} a.worldValues the world's coins (what the purse is paid in)
  * @param {number} [a.helpers]
+ * @param {number} [a.batch] how many to make in one go (clamped with `clampBatch`; 1 when batches are off)
  * @param {Record<string, string>} [a.rarityLabels]
  * @param {Record<string, string>} [a.toolLabels]
  */
 export function assess(a) {
   const { recipe: r, profession: p, rules, ranks } = a;
+  const batch = clampBatch(a.batch ?? 1, rules);
   const rarity = recipeRarity(r);
   const labels = a.rarityLabels ?? {};
   const problems = [];
@@ -336,7 +363,7 @@ export function assess(a) {
   if (!rankOk) problems.push(need ? `Needs ${need.name} ${signed(need.bonus)} (crafts up to ${rarityLabel(need.rarity, labels)}).` : `No rank crafts ${rarityLabel(rarity, labels)}.`);
   if (!r.result.uuid) problems.push("The recipe has no result item.");
 
-  const materials = r.materials.map(m => { const have = haveOf(a.inventory, m); return { name: m.name || "Material", uuid: m.uuid, img: m.img, need: m.qty, have, ok: have >= m.qty }; });
+  const materials = r.materials.map(m => { const have = haveOf(a.inventory, m); const need = m.qty * batch; return { name: m.name || "Material", uuid: m.uuid, img: m.img, need, each: m.qty, have, ok: have >= need }; });
   const materialsOk = materials.every(m => m.ok);
   if (!materialsOk) problems.push("Missing materials.");
 
@@ -360,6 +387,7 @@ export function assess(a) {
     if (pct !== undefined) { hours = hours * pct / 100; timeNotes.push(`${rank.row?.name} ${pct}%`); }
     const helpers = Math.max(0, Math.min(rules.helpersMax, Math.floor(Number(a.helpers) || 0)));
     if (helpers && rules.helperDivides) { hours = hours / (1 + helpers); timeNotes.push(`${helpers} helper${helpers === 1 ? "" : "s"}`); }
+    if (batch > 1) { hours = hours * batch; timeNotes.push(`batch of ${batch}`); }
     const h = /** @type {number} */ (hours);
     if (rules.rounding === "hour") hours = Math.ceil(h - 1e-9);
     else if (rules.rounding === "day" && rules.hoursPerDay) hours = Math.ceil(h / rules.hoursPerDay - 1e-9) * rules.hoursPerDay;
@@ -371,6 +399,7 @@ export function assess(a) {
   if (r.cost !== null) { costGp = r.cost; costFrom = "recipe"; }
   else if (rr?.cost !== null && rr?.cost !== undefined) { costGp = rr.cost * share; costFrom = "rarity"; }
   else if (rules.materialPct !== null && priceGp !== null) { costGp = priceGp * rules.materialPct / 100; costFrom = "price"; }
+  if (costGp !== null) costGp = costGp * batch;
   const cost = costGp === null ? null : Math.floor(costGp * (a.values.gp || 100) + 1e-9);
   const charge = rules.chargeCoin && costGp !== null ? Math.floor(costGp * (a.worldValues.gp || 100) + 1e-9) : 0;
   const coinOk = a.purse >= charge;
@@ -378,13 +407,16 @@ export function assess(a) {
 
   // DC: recipe → rarity table → the base DC; none = the GM decides.
   const dc = r.dc ?? rr?.dc ?? rules.dc ?? null;
+  // Better result: the recipe has one, a DC is set and the rules give a margin.
+  const betterAt = dc !== null && rules.betterMargin !== null && hasBetter(r) ? dc + rules.betterMargin : null;
 
   const status = !know ? "unknown" : !rankOk ? "rank" : problems.length ? "missing" : "ok";
   return {
     id: r.id, name: r.name, rarity, rarityLabel: rarity ? rarityLabel(rarity, labels) : "Mundane", magic, consumable,
     learned, tool: tool ? { ...tool, label: a.toolLabels?.[tool.key] ?? tool.key } : null, knows: know,
     rank: rank.row, need, rankOk, materials, materialsOk,
-    hours, timeFrom, timeNotes, price, cost, costFrom, charge, coinOk, dc,
+    hours, timeFrom, timeNotes, price, cost, costFrom, charge, coinOk, dc, batch, batchMax: rules.batchMax ?? 1, betterAt,
+    makes: r.result.qty * batch,
     problems, canCraft: problems.length === 0, status
   };
 }
@@ -396,28 +428,74 @@ export function assess(a) {
 export const outcome = (total, dc) => (dc === null ? true : Number(total) >= dc);
 
 /**
+ * Whether a successful check makes the better result: the total reaches `betterAt` (DC + the rules' margin; null = no better
+ * result for this craft: no DC, no margin, or the recipe has none).
+ * @param {boolean} success @param {number | null} total @param {number | null} betterAt
+ */
+export const isBetter = (success, total, betterAt) => success && betterAt !== null && total !== null && Number(total) >= betterAt;
+
+/**
+ * What a successful craft makes: the normal result, or with a better roll the better item (when set) and the extra quantity, all
+ * times the batch. `{ uuid, name, img, type, qty, better }`.
+ * @param {import("./recipes-model.mjs").Recipe} r @param {{ batch: number, better: boolean }} o
+ */
+export function resultPlan(r, o) {
+  const n = Math.max(1, Math.floor(o.batch) || 1);
+  const b = o.better && hasBetter(r) ? r.better : null;
+  const item = b?.uuid ? { uuid: b.uuid, name: b.name, img: b.img, type: b.type, rarity: b.rarity } : { uuid: r.result.uuid, name: r.result.name, img: r.result.img, type: r.result.type, rarity: r.result.rarity };
+  return { ...item, qty: (r.result.qty + (b?.qty ?? 0)) * n, better: !!b };
+}
+
+/**
+ * What the better result is, as text for the window ("+2 more", "Fine Sword instead", "Fine Sword ×3 instead"), "" when none.
+ * @param {import("./recipes-model.mjs").Recipe} r
+ */
+export function betterText(r) {
+  if (!hasBetter(r)) return "";
+  const b = r.better;
+  if (!b.uuid) return `${b.qty} more`;
+  const name = b.name || "the better item";
+  const qty = r.result.qty + b.qty;
+  return `${name}${qty > 1 ? ` ×${qty}` : ""} instead`;
+}
+
+/**
  * What a craft does to the character, by result: success makes the item and uses up the materials (and the coin cost when it is
  * charged); a failure uses them up too unless the rules say "keep".
  * @param {boolean} success @param {CraftRules} rules
  */
 export const spends = (success, rules) => success || rules.failMaterials !== "keep";
 
-/** What a recipe's materials use up, as "2× Copper Bar" lines. @param {Array<{ name: string, qty?: number, need?: number }>} materials */
-export const usedList = materials => materials.map(m => `${Number(m.qty ?? m.need) || 1}× ${m.name || "material"}`);
+/**
+ * What a recipe's materials use up, as "2× Copper Bar" lines (`need` is already the batch's total; a recipe's `qty` is times `times`).
+ * @param {Array<{ name: string, qty?: number, need?: number }>} materials @param {number} [times]
+ */
+export const usedList = (materials, times = 1) => materials.map(m => `${m.need !== undefined ? Number(m.need) || 1 : (Number(m.qty) || 1) * times}× ${m.name || "material"}`);
 
 /**
  * The notice shown before a craft (next to the Craft button and as its tooltip): what the craft takes from the inventory and when.
  * `charge` adds the coin cost; `approval` (GM approves each craft) moves the moment to the GM's decision.
- * @param {Array<{ name: string, need: number }>} materials @param {{ fail: string, charge?: boolean, approval?: boolean }} o
+ * `batch` (0.5) names the batch; the materials' `need` is already its total.
+ * @param {Array<{ name: string, need: number }>} materials @param {{ fail: string, charge?: boolean, approval?: boolean, batch?: number }} o
  */
 export function usesNotice(materials, o) {
   const items = usedList(materials);
   if (o.charge) items.push("the coin cost");
-  if (!items.length) return "Crafting uses up nothing from the inventory.";
+  const what = (o.batch ?? 1) > 1 ? `A batch of ${o.batch}` : "Crafting";
+  if (!items.length) return `${what} uses up nothing from the inventory.`;
   const when = o.approval ? "when the GM decides" : "when you roll";
   const tail = o.fail === "keep" ? `taken ${when}, on success; kept on a failure` : `taken ${when}, success or failure`;
-  return `Crafting uses up: ${items.join(", ")} (${tail}).`;
+  return `${what} uses up: ${items.join(", ")} (${tail}).`;
 }
+
+/**
+ * The `wanderers-guild.crafted` hook's payload: ids, the outcome and (0.5) `better` and `batch`, nothing else.
+ * @param {{ actorId: string, recipeId: string, success: boolean, better?: boolean, batch?: number, messageId: string | null }} o
+ */
+export const craftedPayload = o => ({
+  actorId: String(o.actorId), recipeId: String(o.recipeId), success: !!o.success, better: !!o.better && !!o.success,
+  batch: Math.max(1, Math.floor(Number(o.batch)) || 1), messageId: o.messageId ?? null
+});
 
 // ------------------------------------------------------------------ the craft card's state
 

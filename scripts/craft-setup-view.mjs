@@ -10,7 +10,7 @@ import { esc } from "./const.mjs";
 import { badge } from "../vendor/wanderers-core/index.mjs";
 import { RECIPES_MAX, MATERIALS_MAX, RECIPE_NAME_MAX, GROUP_MAX, RECIPE_NOTES_MAX, QTY_MAX, DC_MIN, DC_MAX, RARITY_OVERRIDES, LEARN_ROUTES } from "./recipes-model.mjs";
 import { ROUTE_LABELS } from "./learn-model.mjs";
-import { FAIL_RULES, ROUNDING, PCT_MAX, HELPERS_MAX, DAY_HOURS_MAX, RULES_VERSION } from "./craft-model.mjs";
+import { FAIL_RULES, ROUNDING, PCT_MAX, HELPERS_MAX, DAY_HOURS_MAX, RULES_VERSION, BATCH_LIMIT, MARGIN_MAX } from "./craft-model.mjs";
 import { signed } from "./ranks-model.mjs";
 
 /** @typedef {{ key: string, label: string }} Choice */
@@ -38,7 +38,7 @@ export function ioPanel(kind, json, hint) {
 
 /**
  * @typedef {import("./recipes-model.mjs").Recipe} Recipe
- * @typedef {{ id?: string, name?: string, profession?: string, group?: string, result?: Partial<import("./recipes-model.mjs").RecipeResult>, rarity?: string, materials?: Array<Partial<import("./recipes-model.mjs").Material>>, dc?: number | null, hours?: number | null, cost?: number | null, auto?: boolean, learn?: string, notes?: string }} RecipeDraft
+ * @typedef {{ id?: string, name?: string, profession?: string, group?: string, result?: Partial<import("./recipes-model.mjs").RecipeResult>, rarity?: string, materials?: Array<Partial<import("./recipes-model.mjs").Material>>, dc?: number | null, hours?: number | null, cost?: number | null, auto?: boolean, learn?: string, notes?: string, better?: Partial<import("./recipes-model.mjs").Better> }} RecipeDraft
  * @typedef {{ uuid: string, name: string, img: string, consume: boolean }} TeachItem a world item that teaches the recipe
  */
 
@@ -103,6 +103,7 @@ export function recipeEditor(r, m) {
       <label class="wg-check"><input type="checkbox" name="auto"${d.auto ? " checked" : ""}> Known by everyone with the profession (no need to learn it)</label>
       <label class="wg-field"><span>Learned by</span><select name="learn">${LEARN_ROUTES.map(k => opt(k, ROUTE_LABELS[k], k === (d.learn ?? "rank"))).join("")}</select></label>
       <p class="wc-hint">Rank: a player learns it on the Recipes page when their rank allows. Recipe item: only by using a recipe item (sold or found like any item), or a GM teaching it. GM only: only a GM teaches it. A GM can always teach a recipe (Teach, Teach to…).</p>
+      ${betterBox(d, res, m)}
       ${teachBox(r, m.teachItems ?? [])}
       <fieldset class="wg-fieldset"><legend>Materials (used up on a craft)</legend>
         <div class="wg-drop" data-wg-drop="mat.new">${mats.length ? `<table class="wc-table"><thead><tr><th>Name</th><th>Item UUID</th><th>Qty</th><th><span class="wc-sr">Remove</span></th></tr></thead><tbody>${matRows}</tbody></table>` : `<p class="wc-hint">None yet: drop items here, or press Add material.</p>`}</div>
@@ -112,6 +113,22 @@ export function recipeEditor(r, m) {
     </div>
     <footer class="wc-row wc-end wg-pad"><button type="button" class="wc-btn wc-btn-ghost" data-action="recCancel">Cancel</button>
       <button type="submit" class="wc-btn wc-btn-primary"><i class="fa-solid fa-floppy-disk" aria-hidden="true"></i> Save recipe</button></footer></form>`;
+}
+
+/**
+ * The *Better result* box of the recipe editor (0.5): extra quantity and/or a different item (dropped here), made when the roll
+ * reaches the DC plus the Crafting rules' margin.
+ * @param {RecipeDraft} d @param {Partial<import("./recipes-model.mjs").RecipeResult>} res @param {{ rarities: Choice[] }} m
+ */
+export function betterBox(d, res, m) {
+  const b = d.better ?? {};
+  const preview = b.uuid ? `<p class="wc-hint">${b.img ? `<img class="wg-thumb" src="${esc(b.img)}" alt="">` : ""}${esc(b.name || "(not read yet: saved on Save)")}${b.rarity ? ` · ${esc(m.rarities.find(x => x.key === b.rarity)?.label ?? b.rarity)}` : ""}${b.type ? ` · ${esc(b.type)}` : ""}</p>` : "";
+  return `<fieldset class="wg-fieldset"><legend>Better result</legend>
+    <div class="wg-drop" data-wg-drop="better">
+      <label class="wg-field"><span>Extra made</span><input type="number" class="wg-num" name="better.qty" min="0" max="${QTY_MAX}" step="1" value="${esc(String(b.qty ?? 0))}" placeholder="0"></label>
+      <label class="wg-field"><span>Or makes (item UUID)</span><input type="text" name="better.uuid" value="${esc(b.uuid ?? "")}" placeholder="drag an item here; empty: the normal item"></label>
+      ${preview}</div>
+    <p class="wc-hint">Made instead of the normal result when the roll reaches the DC plus the margin on the Crafting rules page (both must be set; no DC, no better result). The better item takes the place of ${esc(res.name || "the normal item")}; extra made adds to the ${esc(String(res.qty ?? 1))} it makes. Leave both empty for none.</p></fieldset>`;
 }
 
 /**
@@ -153,6 +170,8 @@ export function readRecipeForm(entries) {
   for (const [k, v] of entries) {
     const s = String(v ?? "");
     const mm = /^mat\.(name|uuid|qty)\.(\d{1,2})$/.exec(k);
+    if (k === "better.qty") { (o.better ??= {}).qty = Math.max(0, Math.round(Number(s) || 0)); continue; }
+    if (k === "better.uuid") { (o.better ??= {}).uuid = s.trim(); continue; }
     if (mm) { (mats[Number(mm[2])] ??= {})[mm[1]] = mm[1] === "qty" ? Number(s) || 1 : s.trim(); continue; }
     if (k === "result.uuid") o.result.uuid = s.trim();
     else if (k === "result.qty") o.result.qty = Number(s) || 1;
@@ -195,6 +214,9 @@ export function rulesPage(m) {
       <h3 class="wg-h">Check</h3>
       <label class="wg-field"><span>Base DC</span><span>${num("dc", r.dc, "Base DC", `min="${DC_MIN}" max="${DC_MAX}" step="1"`)} <span class="wc-hint">when neither the recipe nor its rarity sets one</span></span></label>
       <label class="wg-field"><span>On a failed check</span><span>${sel("failMaterials", FAIL_RULES, r.failMaterials)} <span class="wc-hint">materials are taken when the roll lands; players see this before they craft</span></span></label>
+      <label class="wg-field"><span>Better result margin</span><span>${num("betterMargin", r.betterMargin, "Better result margin", `max="${MARGIN_MAX}" step="1"`)} <span class="wc-hint">a roll of at least the DC plus this makes the recipe's better result (set on each recipe); empty = off</span></span></label>
+      <h3 class="wg-h">Batches</h3>
+      <p class="wg-inline">Up to ${num("batchMax", r.batchMax, "Most in one batch", `max="${BATCH_LIMIT}" step="1"`)} crafted in one batch <span class="wc-hint">(one check for the whole batch; materials, coin and time are multiplied; empty or 1 = one at a time)</span></p>
       <h3 class="wg-h">Helpers</h3>
       <p class="wg-inline">Up to ${num("helpersMax", r.helpersMax, "Most helpers", `max="${HELPERS_MAX}" step="1"`)} helpers. <label class="wg-check"><input type="checkbox" name="helperDivides"${r.helperDivides ? " checked" : ""}> Each helper divides the time</label></p>
       <h3 class="wg-h">Time by rank</h3>
@@ -221,7 +243,7 @@ export function readRulesForm(entries) {
     if (tm) { const p = n(s); if (p !== null) o.rankTime[tm[1]] = p; continue; }
     if (k === "chargeCoin" || k === "helperDivides") o[k] = s === "on" || s === "true";
     else if (k === "rounding" || k === "failMaterials") o[k] = s;
-    else if (["timeHours", "timePerGp", "hoursPerDay", "materialPct", "consumablePct", "dc", "helpersMax"].includes(k)) o[k] = n(s);
+    else if (["timeHours", "timePerGp", "hoursPerDay", "materialPct", "consumablePct", "dc", "helpersMax", "betterMargin", "batchMax"].includes(k)) o[k] = n(s);
   }
   if (o.consumablePct === null) o.consumablePct = 100;
   return o;

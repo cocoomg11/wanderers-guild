@@ -19,7 +19,7 @@ test("cleanRecipe: defaults, overrides, junk", () => {
 });
 
 test("normalizeRecipes: order, unique ids, cap, versions", () => {
-  assert.deepEqual(R.normalizeRecipes(undefined), { v: 2, list: [] });
+  assert.deepEqual(R.normalizeRecipes(undefined), { v: 3, list: [] });
   const s = R.normalizeRecipes({ v: 1, list: [sword, sword, null, { name: "" }] });
   assert.deepEqual(s.list.map(r => r.id), ["plain-blade", "plain-blade-2"]);
   assert.equal(R.normalizeRecipes({ v: 1, list: Array.from({ length: 400 }, (_, i) => ({ name: `R${i}` })) }).list.length, R.RECIPES_MAX);

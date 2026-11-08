@@ -165,21 +165,25 @@ function readRoll(msg, user, actor, recipeId) {
 /**
  * Makes the craft's changes to the actor. Success: the item (or more of a matching stack), then the materials and the coin cost.
  * Failure: the materials and coin only when the rules say they are lost. Returns what was used, for the card.
+ * A batch (0.5) uses the materials and coin `a.batch` times over and makes `a.batch` times the result; a better roll makes the
+ * recipe's better result (`CM.resultPlan`).
  * @param {any} actor @param {import("./recipes-model.mjs").Recipe} recipe @param {ReturnType<typeof assessIn>} a @param {boolean} success
+ * @param {boolean} better
  */
-async function apply(actor, recipe, a, success) {
+async function apply(actor, recipe, a, success, better) {
   const rules = Data.rules();
   const spend = CM.spends(success, rules);
   const inv = D5.inventory(actor);
-  const consumed = spend ? CM.consumePlan(inv, recipe.materials) : { updates: [], deletes: [] };
+  const consumed = spend ? CM.consumePlan(inv, recipe.materials, a.batch) : { updates: [], deletes: [] };
   if (consumed.error || !consumed.updates || !consumed.deletes) throw new Error(consumed.error ?? "Missing materials.");
   /** @type {{ updates: Array<Record<string, any>>, deletes: string[] }} */
   const plan = { updates: consumed.updates, deletes: consumed.deletes };
   if (spend && a.charge && Eco.purse(actor) < a.charge) throw new Error("Not enough coin for the cost.");
+  const made = CM.resultPlan(recipe, { batch: a.batch, better: success && better });
   if (success) {
-    const doc = await fromUuid(recipe.result.uuid);
-    if (!doc || doc.documentName !== "Item") throw new Error("The result item can't be found.");
-    const qty = recipe.result.qty;
+    const doc = await fromUuid(made.uuid);
+    if (!doc || doc.documentName !== "Item") throw new Error(made.better && recipe.better.uuid ? "The better result item can't be found." : "The result item can't be found.");
+    const qty = made.qty;
     const stack = CM.stackOf(inv, { uuid: doc.uuid, name: doc.name, type: doc.type }, plan.deletes);
     if (stack) {
       const left = plan.updates.find(u => u._id === stack.id)?.["system.quantity"] ?? stack.qty;
@@ -192,22 +196,25 @@ async function apply(actor, recipe, a, success) {
       await actor.createEmbeddedDocuments("Item", [data]);
     }
   }
-  const used = spend ? CM.usedList(recipe.materials) : [];
+  const used = spend ? CM.usedList(a.materials) : [];
   if (plan.updates.length) await actor.updateEmbeddedDocuments("Item", plan.updates);
   if (plan.deletes.length) await actor.deleteEmbeddedDocuments("Item", plan.deletes);
   let coin = "";
   if (spend && a.charge) { await Eco.pay(actor, a.charge, `Crafting: ${recipe.name}`); coin = Eco.html(a.cost ?? 0); }
-  return { used, coin };
+  return { used, coin, made };
 }
 
 /**
  * The card's view from its stored state.
- * @param {any} st @param {{ actor: any, recipe: import("./recipes-model.mjs").Recipe | undefined, timeText?: string, used?: string[], coin?: string, reason?: string }} x
+ * @param {any} st @param {{ actor: any, recipe: import("./recipes-model.mjs").Recipe | undefined, timeText?: string, used?: string[], coin?: string, reason?: string, made?: ReturnType<typeof CM.resultPlan> }} x
  */
 function cardView(st, x) {
+  const batch = Math.max(1, Number(st.batch) || 1);
+  const made = x.made ?? (x.recipe ? CM.resultPlan(x.recipe, { batch, better: false }) : null);
+  const betterName = made?.better && x.recipe?.better.uuid ? made.name : "";
   return cardHTML({
     state: st.state, actorName: x.actor?.name ?? "?", recipeName: x.recipe?.name ?? st.recipe, rarity: x.recipe ? RC.recipeRarity(x.recipe) : "",
-    img: x.recipe?.result.img ?? "", qty: x.recipe?.result.qty ?? 1, toolLabel: D5.toolLabel(st.tool ?? ""), total: st.total ?? null, dc: st.dc ?? null,
+    img: (betterName ? made?.img : "") || x.recipe?.result.img || "", qty: made?.qty ?? 1, batch, better: !!made?.better, betterName, betterAt: st.betterAt ?? null, toolLabel: D5.toolLabel(st.tool ?? ""), total: st.total ?? null, dc: st.dc ?? null,
     timeText: x.timeText ?? st.timeText ?? "", reason: x.reason ?? "", used: x.used ?? [], coin: x.coin ?? "", approvalAsked: !!st.approval
   });
 }
@@ -215,14 +222,14 @@ function cardView(st, x) {
 /** Posts a craft card. @param {any} actor @param {any} st @param {string} content @param {string[]} whisper */
 const postCard = (actor, st, content, whisper) => ChatMessage.create({ content, speaker: ChatMessage.getSpeaker({ actor }), whisper, flags: { [ID]: { craft: st } } });
 
-/** @param {{ actor: string, recipe: string, roll: string, helpers: number }} data @param {any} user */
+/** @param {{ actor: string, recipe: string, roll: string, helpers: number, qty?: number }} data @param {any} user */
 async function onCraft(data, user) {
   if (BUSY.has(data.roll)) return log("craft: that roll is being handled");
   BUSY.add(data.roll);
   try { await serial(data.actor, () => craftNow(data, user)); } finally { BUSY.delete(data.roll); }
 }
 
-/** @param {{ actor: string, recipe: string, roll: string, helpers: number }} data @param {any} user */
+/** @param {{ actor: string, recipe: string, roll: string, helpers: number, qty?: number }} data @param {any} user */
 async function craftNow(data, user) {
   const actor = await actorOf(data.actor); if (!actor) return log("craft: no such actor");
   if (!owns(actor, user)) return log(`craft refused: ${user.name} doesn't own ${actor.name}`);
@@ -232,14 +239,16 @@ async function craftNow(data, user) {
   if ("error" in roll) return tell(user, actor, `${recipe.name}: ${roll.error}`);
   USED.add(msg.id);
   await msg.setFlag(ID, "rollUsed", true);
-  const a = assessIn(context(actor), recipe, data.helpers);
   const rules = Data.rules();
+  // The batch size: the request's (schema: 1–BATCH_LIMIT, missing = 1), never more than the rules allow now.
+  const batch = CM.clampBatch(data.qty ?? 1, rules);
+  const a = assessIn(context(actor), recipe, data.helpers, batch);
   // A player's roll must be the tool check with the character's own bonus (a GM's is trusted). With *GM approves each craft* on,
   // a roll that can't be checked goes to the GM's card with the reason instead of being refused.
   const bad = a.canCraft && a.tool && !user.isGM ? verifyRoll(D5.rollFacts(msg), { kind: "tool", key: a.tool.key, ...D5.checkBonus(actor, "tool", a.tool.key) }) : null;
   const unchecked = bad && !bad.ok ? bad.error : "";
   if (unchecked && !S.get("craftApproval")) return tell(user, actor, `${recipe.name}: nothing was made or used up. ${unchecked}`);
-  const st = { v: CM.CARD_VERSION, state: "pending", actor: actor.uuid, recipe: recipe.id, user: user.id, roll: data.roll, tool: a.tool?.key ?? "", total: roll.total, dc: a.dc, helpers: data.helpers, whisper: roll.whisper, approval: !!S.get("craftApproval"), timeText: CM.hoursText(a.hours, rules.hoursPerDay), at: Date.now() };
+  const st = { v: CM.CARD_VERSION, state: "pending", actor: actor.uuid, recipe: recipe.id, user: user.id, roll: data.roll, tool: a.tool?.key ?? "", total: roll.total, dc: a.dc, helpers: data.helpers, batch: a.batch, betterAt: a.betterAt, better: false, whisper: roll.whisper, approval: !!S.get("craftApproval"), timeText: CM.hoursText(a.hours, rules.hoursPerDay), at: Date.now() };
   if (!a.canCraft) {
     st.state = "refused";
     return postCard(actor, st, cardView(st, { actor, recipe, reason: `Nothing was made or used up: ${a.problems.join(" ")}` }), st.whisper);
@@ -258,10 +267,14 @@ async function craftNow(data, user) {
  */
 async function finish(actor, recipe, a, st, success, card) {
   let extras;
+  // A better result needs a success that reaches DC + margin (`betterAt`, from the assessment made now).
+  const better = CM.isBetter(success, st.total ?? null, a.betterAt);
+  st.batch = a.batch; st.betterAt = a.betterAt;
   try {
-    const r = await apply(actor, recipe, a, success);
+    const r = await apply(actor, recipe, a, success, better);
     st.state = success ? "done" : "failed";
-    extras = { actor, recipe, used: r.used, coin: r.coin, reason: success ? "" : CM.spends(false, Data.rules()) ? "The check failed; the materials are used up." : "The check failed; the materials are kept." };
+    st.better = r.made.better;
+    extras = { actor, recipe, used: r.used, coin: r.coin, made: success ? r.made : undefined, reason: success ? "" : CM.spends(false, Data.rules()) ? "The check failed; the materials are used up." : "The check failed; the materials are kept." };
   } catch (e) {
     warn("craft", e);
     st.state = "error";
@@ -270,7 +283,7 @@ async function finish(actor, recipe, a, st, success, card) {
   const content = cardView(st, extras);
   const message = card ? await card.update({ content, whisper: st.whisper, [`flags.${ID}.craft`]: st }) : await postCard(actor, st, content, st.whisper);
   if (st.state === "done" || st.state === "failed") {
-    try { Hooks.callAll(HOOKS.crafted, { actorId: actor.id, recipeId: recipe.id, success, messageId: message?.id ?? card?.id ?? null }); } catch (e) { warn("crafted hook", e); }
+    try { Hooks.callAll(HOOKS.crafted, CM.craftedPayload({ actorId: actor.id, recipeId: recipe.id, success, better: !!st.better, batch: st.batch, messageId: message?.id ?? card?.id ?? null })); } catch (e) { warn("crafted hook", e); }
   }
 }
 
@@ -292,7 +305,7 @@ async function decideNow(data) {
   const next = { ...st };
   if ("refuse" in d) { next.state = "refused"; await card.update({ content: cardView(next, { actor, recipe, reason: "The GM refused this craft: nothing was made or used." }), [`flags.${ID}.craft`]: next }); return; }
   if (!actor || !recipe) { next.state = "error"; await card.update({ content: cardView(next, { actor, recipe, reason: "The character or the recipe no longer exists." }), [`flags.${ID}.craft`]: next }); return; }
-  const a = assessIn(context(actor), recipe, st.helpers);
+  const a = assessIn(context(actor), recipe, st.helpers, Number(st.batch) || 1);
   if (!a.canCraft) { next.state = "refused"; await card.update({ content: cardView(next, { actor, recipe, reason: `Nothing was made or used up: ${a.problems.join(" ")}` }), [`flags.${ID}.craft`]: next }); return; }
   await finish(actor, recipe, a, next, d.success, card);
 }

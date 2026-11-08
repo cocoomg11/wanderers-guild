@@ -14,7 +14,7 @@ import { S, leader, changed, log } from "./core.mjs";
 import { rankFor, rarityLabel, signed } from "./ranks-model.mjs";
 import { recipesFor } from "./recipes-model.mjs";
 import { ICONS } from "./professions-model.mjs";
-import { FAIL_RULES } from "./craft-model.mjs";
+import { FAIL_RULES, betterText, clampBatch } from "./craft-model.mjs";
 import { context, assessIn, groupOf, recipeItems } from "./craft-read.mjs";
 import { learnState, routeOf, normalizeTeaches } from "./learn-model.mjs";
 import { craftWindowHTML } from "./crafting-view.mjs";
@@ -43,6 +43,8 @@ export class CraftingApp extends Base {
     this.filter = "all";
     /** @type {string | null} */ this.selected = null;
     this.helpers = 0;
+    /** How many to craft in one go (0.5; clamped to the rules' batchMax when used). */
+    this.batch = 1;
     this.busy = false;
     OPEN.set(this.key, this);
   }
@@ -71,10 +73,10 @@ export class CraftingApp extends Base {
     const items = new Map();
     for (const it of recipeItems(this.actor)) { const t = normalizeTeaches(it.teaches); if (t && !items.has(t.recipe) && it.qty > 0) items.set(t.recipe, { uuid: it.uuid, name: it.name }); }
     const rows = recipesFor(ctx.book, this.professionId).map(r => {
-      const a = assessIn(ctx, r, this.helpers);
+      const a = assessIn(ctx, r, this.helpers, this.batch);
       const route = routeOf(r); const item = route === "gm" ? undefined : items.get(r.id);
       return {
-        ...a, group: groupOf(r), img: r.result.img, notes: r.notes, qty: r.result.qty, toolTotal: a.tool ? D5.toolTotal(this.actor, a.tool.key) : "", source: r.auto ? "everyone" : "",
+        ...a, group: groupOf(r), img: r.result.img, notes: r.notes, qty: r.result.qty, betterText: betterText(r), toolTotal: a.tool ? D5.toolTotal(this.actor, a.tool.key) : "", source: r.auto ? "everyone" : "",
         route, hasItem: !!item, itemUuid: item?.uuid ?? "", itemName: item?.name ?? "",
         learnState: learnState({ knows: a.knows, route, rankOk: a.rankOk && a.learned, playersLearn, hasItem: !!item, gm })
       };
@@ -84,7 +86,7 @@ export class CraftingApp extends Base {
       profession: { id: this.professionId, name: p?.name ?? this.professionId, icon: ICONS[p?.icon ?? "hammer"]?.d ?? ICONS.hammer.d },
       rankText: rk.row ? `${rk.row.name} ${signed(rk.row.bonus)}` : "No rank", craftsUpTo: rk.row?.rarity ? rarityLabel(rk.row.rarity, ctx.rarityLabels) : "",
       gm, playersLearn, hideUnknown: S.get("undiscoveredRecipes") === "hide", economyNote: Eco.note(), query: this.query, filter: this.filter,
-      rows: /** @type {any} */ (rows), selected: this.selected, helpers: this.helpers, helpersMax: ctx.rules.helpersMax, helperDivides: ctx.rules.helperDivides,
+      rows: /** @type {any} */ (rows), selected: this.selected, helpers: this.helpers, batch: clampBatch(this.batch, ctx.rules), betterMargin: ctx.rules.betterMargin, helpersMax: ctx.rules.helpersMax, helperDivides: ctx.rules.helperDivides,
       hoursPerDay: ctx.rules.hoursPerDay, failText: FAIL_RULES[ctx.rules.failMaterials], failRule: ctx.rules.failMaterials, approval: !!S.get("craftApproval"), noGM: !leader.activeGM(), locked: this.busy || !canUse(this.actor),
       money: (/** @type {number} */ n) => Eco.html(n)
     };
@@ -111,6 +113,8 @@ export class CraftingApp extends Base {
     if (focused && search) { search.focus(); search.setSelectionRange(search.value.length, search.value.length); }
     const helpers = /** @type {HTMLInputElement | null} */ (content.querySelector("[data-wg-helpers]"));
     helpers?.addEventListener("change", () => { this.helpers = Math.max(0, Math.round(Number(helpers.value) || 0)); this.render(); });
+    const batch = /** @type {HTMLInputElement | null} */ (content.querySelector("[data-wg-batch]"));
+    batch?.addEventListener("change", () => { this.batch = Math.max(1, Math.round(Number(batch.value) || 1)); this.render(); });
   }
 
   /** @param {PointerEvent} _event @param {HTMLElement} target */
@@ -135,7 +139,7 @@ export class CraftingApp extends Base {
     if (this.busy) return;
     const ctx = context(this.actor);
     const recipe = ctx.book.list.find(r => r.id === id); if (!recipe) return;
-    const a = assessIn(ctx, recipe, this.helpers);
+    const a = assessIn(ctx, recipe, this.helpers, this.batch);
     if (!a.canCraft || !a.tool) { ui.notifications.warn(`${TITLE}: ${a.problems[0] ?? "can't craft this now."}`); return; }
     if (!leader.activeGM()) { ui.notifications.warn(`${TITLE}: a GM must be connected to craft.`); return; }
     this.busy = true; this.render();
@@ -145,7 +149,7 @@ export class CraftingApp extends Base {
       const rolls = await this.actor.rollToolCheck(config, {}, message);
       const msg = Array.isArray(rolls) ? rolls[0]?.parent : /** @type {any} */ (rolls)?.parent;
       if (!msg?.id) { log("craft: no roll message (cancelled?)"); return; }
-      if (!leader.request("craft", { actor: this.actor.uuid, recipe: recipe.id, roll: msg.id, helpers: Math.min(ctx.rules.helpersMax, this.helpers) })) ui.notifications.warn(`${TITLE}: no GM is connected; the roll wasn't used.`);
+      if (!leader.request("craft", { actor: this.actor.uuid, recipe: recipe.id, roll: msg.id, helpers: Math.min(ctx.rules.helpersMax, this.helpers), qty: a.batch })) ui.notifications.warn(`${TITLE}: no GM is connected; the roll wasn't used.`);
     } catch (e) {
       console.error(`${ID} | craft`, e);
       ui.notifications.error(`${TITLE}: the tool check failed (${String(/** @type {any} */ (e)?.message ?? e)}).`);

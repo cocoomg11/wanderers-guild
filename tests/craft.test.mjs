@@ -20,7 +20,7 @@ test("default rules: nothing set, neutral", () => {
   assert.deepEqual([d.consumablePct, d.helpersMax, d.helperDivides, d.failMaterials, d.chargeCoin], [100, 0, false, "lose", false], "a failure uses the materials up by default");
   assert.ok(Object.values(d.byRarity).every(r => r.hours === null && r.cost === null && r.dc === null));
   assert.deepEqual(C.rulesStatus(d).set, []);
-  assert.equal(C.rulesStatus(rules).unset.length, 0);
+  assert.deepEqual(C.rulesStatus(rules).unset, ["a better-result margin", "batches"], "0.5's two rules are unset in the 0.4 fixture");
 });
 
 test("normalizeRules clamps and drops junk", () => {

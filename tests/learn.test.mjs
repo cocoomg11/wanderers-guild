@@ -15,19 +15,19 @@ const facts = (o = {}) => ({ isGM: false, owns: true, playersLearn: true, profes
 const item = (o = {}) => ({ teaches: L.teachesFlag("blade", true), qty: 1, ...o });
 
 test("recipeBook v2: learn route, v1 reads as rank, import accepts v1 and v2", () => {
-  assert.equal(R.RECIPES_VERSION, 2);
+  assert.equal(R.RECIPES_VERSION, 3, "0.5: better results");
   assert.deepEqual(R.LEARN_ROUTES, ["rank", "item", "gm"]);
   const v1 = R.normalizeRecipes({ v: 1, list: [{ id: "a", name: "A" }, { id: "b", name: "B", learn: "item" }] });
-  assert.equal(v1.v, 2);
+  assert.equal(v1.v, R.RECIPES_VERSION);
   assert.deepEqual(v1.list.map(r => r.learn), ["rank", "item"], "v1 without a route reads as rank");
   const v2 = R.normalizeRecipes({ v: 2, list: [{ name: "A", learn: "gm" }, { name: "B", learn: "trainer" }, { name: "C", learn: 3 }] });
   assert.deepEqual(v2.list.map(r => r.learn), ["gm", "rank", "rank"], "unknown routes fall back to rank");
   assert.equal(R.cleanRecipe({ name: "New" }).learn, "rank", "default for a new recipe");
   for (const v of [1, 2]) assert.equal(R.readRecipesImport(JSON.stringify({ format: R.RECIPES_FORMAT, v, list: [{ name: "X", learn: "item" }] })).ok, true, `v${v}`);
-  assert.equal(R.readRecipesImport(JSON.stringify({ v: 3, list: [] })).ok, false, "newer refused");
+  assert.equal(R.readRecipesImport(JSON.stringify({ v: 4, list: [] })).ok, false, "newer refused");
   const round = R.readRecipesImport(R.exportRecipes(v2));
   assert.deepEqual(round.list.map(r => r.learn), ["gm", "rank", "rank"]);
-  assert.match(R.exportRecipes(v2), /"v": 2/);
+  assert.match(R.exportRecipes(v2), /"v": 3/);
 });
 
 test("teaches flag: normalizer, consume default, bad shapes", () => {

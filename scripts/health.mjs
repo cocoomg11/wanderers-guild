@@ -77,6 +77,8 @@ export function run(opts = {}) {
       const found = (/** @type {string} */ u) => { try { return !!fromUuidSync(u); } catch { return true; } };
       const gone = Data.recipes().list.filter(r => r.result.uuid && !found(r.result.uuid)).map(r => r.name);
       if (gone.length) add("warn", `Result item not found for: ${gone.slice(0, 6).join(", ")}${gone.length > 6 ? ", …" : ""} (deleted, or its compendium is gone).`);
+      const goneBetter = Data.recipes().list.filter(r => r.better.uuid && !found(r.better.uuid)).map(r => r.name);
+      if (goneBetter.length) add("warn", `Better result item not found for: ${goneBetter.slice(0, 6).join(", ")}${goneBetter.length > 6 ? ", …" : ""} (a better roll would make nothing: the craft errors and nothing is used up).`);
     });
     h.check(add => {
       // Recipe items: world items and characters' carried copies with our `teaches` flag (no document loads).
@@ -93,6 +95,11 @@ export function run(opts = {}) {
       if (st.unset.length) add("info", `Crafting rules not set (fill in from your rules, setup › Crafting rules): ${st.unset.join(", ")}.`);
       if (!st.set.includes("a DC")) add("info", "No DC is set anywhere, so every craft succeeds on the roll (unless a recipe sets its own DC).");
       add("info", S.get("craftApproval") ? "GM approves each craft: on (crafts wait for a GM's Approve)." : "GM approves each craft: off (results follow the roll; nothing waits).");
+      const rl = Data.rules();
+      const withBetter = Data.recipes().list.filter(r => RC.hasBetter(r)).length;
+      if (rl.betterMargin === null) add("info", withBetter ? `Better results: off (no margin set on the Crafting rules page), though ${plural(withBetter, "recipe")} set one.` : "Better results: off (no margin set).");
+      else add("info", `Better results: a roll of the DC + ${rl.betterMargin} or more makes the better result (${plural(withBetter, "recipe")} set one; needs a DC).`);
+      add("info", rl.batchMax === null ? "Batches: off (one craft at a time)." : `Batches: up to ${rl.batchMax} in one check.`);
       add("info", Data.rules().failMaterials === "keep" ? "On a failed check the materials are kept." : "On a failed check the materials are used up (default).");
       add("info", "Crafting time is shown for reference only; the calendar is never advanced.");
     });

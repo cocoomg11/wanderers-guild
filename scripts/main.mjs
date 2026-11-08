@@ -53,10 +53,10 @@ export const API = {
       recipes: () => Data.recipes(),
       rules: () => Data.rules(),
       known: (/** @type {any} */ actor) => { const a = actorOf(actor); return a && Professions.canView(a) ? Data.known(a) : undefined; },
-      assess: (/** @type {any} */ actor, /** @type {string} */ recipeId) => {
+      assess: (/** @type {any} */ actor, /** @type {string} */ recipeId, /** @type {{ batch?: number }} */ opts = {}) => {
         const a = actorOf(actor); if (!a || !Professions.canView(a)) return undefined;
         const ctx = context(a); const r = ctx.book.list.find(x => x.id === recipeId);
-        return r ? assessIn(ctx, r) : undefined;
+        return r ? assessIn(ctx, r, 0, Number(opts?.batch) || 1) : undefined;
       },
       learn: (/** @type {any} */ actor, /** @type {string} */ recipeId) => { const a = actorOf(actor); return !!a && leader.request("learnRecipe", { actor: a.uuid, recipe: recipeId }); },
       forget: (/** @type {any} */ actor, /** @type {string} */ recipeId) => { const a = actorOf(actor); return gm() && !!a && leader.request("forgetRecipe", { actor: a.uuid, recipe: recipeId }); },

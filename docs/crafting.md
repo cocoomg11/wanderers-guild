@@ -1,6 +1,6 @@
 # Crafting and recipes
 
-How crafting works in Wanderer's Guild 0.4, and what the GM sets up. Crafting is its own feature (*Feature: Crafting*, on by default; it needs *Feature: Professions*). Professions and ranks are explained in [professions.md](professions.md).
+How crafting works in Wanderer's Guild 0.5, and what the GM sets up. Crafting is its own feature (*Feature: Crafting*, on by default; it needs *Feature: Professions*). Professions and ranks are explained in [professions.md](professions.md).
 
 ## The short version
 
@@ -24,6 +24,8 @@ The module ships **no rulebook figures**. Every number crafting uses is world da
 | On a failed check | Materials (and any coin cost) are **used up** (the default: consumed on use), or **kept**. |
 | Helpers | How many helpers a crafter may name, and whether each helper divides the time. |
 | Time by rank | A percentage of the time for crafters at each rank (for a rank perk that speeds crafting). |
+| Better result margin | A roll of at least the DC **plus** this makes the recipe's better result (0.5; empty = off; 0 = any success). |
+| Batches | The most a character crafts in one batch, with one check (0.5; empty or 1 = one at a time). |
 
 A recipe's own DC, time and cost win over this page. Leave a field empty and the Crafting window says "not set". If no DC is set anywhere, the craft succeeds on the roll (the roll is still made and shown; the card says "no DC set: crafted").
 
@@ -79,12 +81,28 @@ A recipe item is any item that teaches a recipe, like a spell scroll: sell it fr
 
 The GM's client checks a recipe item request too: the item must be in that character's own inventory, and the recipe comes from the item's mark as stored, never from what the player's client sends.
 
+## Better results and batches
+
+Both are off until the GM sets a number on the Crafting rules page.
+
+**Better result.** Each recipe can have one (recipe editor › *Better result*): **Extra made** (made on top of the recipe's normal quantity) and/or a different item, dropped on the box (**Or makes**), made **instead of** the normal item. When a craft succeeds and the roll reaches the DC plus the rules' *Better result margin*, the better result is made and the card says *Better result*. No DC (the recipe's, its rarity's or the base DC), no margin, or a recipe without one: no better result, ever. Materials, time and cost are the same as a normal craft.
+
+**Batches.** With *Batches* set to, say, 5, the Craft page shows **How many** (1–5) next to the Craft button. One tool check decides the whole batch:
+
+- Materials, the coin cost and the time are multiplied by the batch (the Materials box shows have / need for the whole batch, "(3 each)"); the notice next to Craft says *A batch of 3 uses up: 9× Bar …*.
+- **Success**: the recipe's quantity × the batch is made. A **better** roll makes the better result for every craft in the batch: (normal quantity + extra) × the batch, of the better item when one is set.
+- **Failure**: the materials (and the coin cost) for the whole batch are used up, unless the rules keep materials on a failure.
+- Not enough for the batch: the Craft button is disabled with *Missing materials*; pick fewer.
+- The active GM's client never makes more than the rules allow at that moment: a batch above *Batches* is cut to it (never raised), and everything is checked again for that size.
+
+A batch of an item that doesn't stack (a weapon, say) is made as one item with that quantity, as dnd5e's quantity field allows.
+
 ## Crafting
 
 The **Craft** page lists the profession's recipes, coloured by rarity: *can craft*, *missing something*, *needs a higher rank*, *recipe unknown*. Search and *Can craft* narrow the list. The selected recipe shows:
 
 - **Materials**: have / need, counted in the character's inventory.
-- **Requirements**: the tool (the profession's linked tool the character is proficient with; expertise wins), the rank needed, the check (the tool and its bonus, and the DC), and the time.
+- **Requirements**: the tool (the profession's linked tool the character is proficient with; expertise wins), the rank needed, the check (the tool and its bonus, and the DC), the time, and the better result when the recipe has one ("Fine Blade ×3 instead · on 17 or more").
 - **Cost**: the item's value, the coin cost (and whether it is paid from the character's coin), what a failure does.
 - Next to the **Craft** button (and as its tooltip), what the craft will use up, for example *Crafting uses up: 2× Copper Bar, 1× Weak Flux (taken when you roll, success or failure)*, or *…on success; kept on a failure* when the rules keep materials on a failure. There is no confirm step: pressing Craft is the go-ahead.
 
@@ -94,7 +112,7 @@ The **Craft** page lists the profession's recipes, coloured by rarity: *can craf
 - **Failure**: the materials (and the coin cost) are used up too, unless the rules say failures keep them.
 - **No DC set** anywhere: the craft succeeds on the roll.
 - **Materials gone** by then (traded, used, dropped): the craft is refused, nothing is made or used up.
-- A **chat card** shows the result, the roll against the DC, the time, and what was used up.
+- A **chat card** shows the result, the roll against the DC, the batch and the better result (when there was one), the time, and what was used up.
 
 Crafts for one character are handled one at a time, so two quick rolls can't spend the same stack twice.
 
