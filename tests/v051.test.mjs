@@ -91,10 +91,3 @@ test("better result rarer than the recipe: a warning (allowed)", () => {
   assert.ok(!w.some(x => /rarer than the recipe for: .*Same/.test(x)));
   assert.match(read("docs/crafting.md"), /rarer than the recipe/);
 });
-
-test("version 0.5.1", () => {
-  const m = JSON.parse(read("module.json")); const pkg = JSON.parse(read("package.json"));
-  assert.equal(m.version, "0.5.1"); assert.equal(pkg.version, "0.5.1");
-  assert.ok(m.download.endsWith("/v0.5.1/module.zip"));
-  assert.match(read("CHANGELOG.md"), /^## 0\.5\.1/m);
-});

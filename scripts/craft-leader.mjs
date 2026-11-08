@@ -260,7 +260,7 @@ function cardView(st, x) {
   const made = x.made ?? (x.recipe ? CM.resultPlan(x.recipe, { batch, better: false }) : null);
   const betterName = made?.better && x.recipe?.better.uuid ? made.name : "";
   return cardHTML({
-    state: st.state, actorName: x.actor?.name ?? "?", recipeName: x.recipe?.name ?? st.recipe, rarity: x.recipe ? RC.recipeRarity(x.recipe) : "",
+    state: st.state, actorName: x.actor?.name ?? "?", recipeName: x.recipe?.name ?? st.recipe, rarity: x.recipe ? RC.recipeRarity(x.recipe) : "", betterRarity: betterName ? made?.rarity ?? "" : "",
     img: (betterName ? made?.img : "") || x.recipe?.result.img || "", qty: made?.qty ?? 1, batch, better: !!made?.better, betterName, betterAt: st.betterAt ?? null, toolLabel: D5.toolLabel(st.tool ?? ""), total: st.total ?? null, dc: st.dc ?? null,
     timeText: x.timeText ?? st.timeText ?? "", reason: x.reason ?? "", used: x.used ?? [], coin: x.coin ?? "", approvalAsked: !!st.approval
   });
@@ -316,7 +316,8 @@ async function finish(actor, recipe, a, st, success, card) {
   let extras;
   // A better result needs a success that reaches DC + margin (`betterAt`, from the assessment made now).
   const better = CM.isBetter(success, st.total ?? null, a.betterAt);
-  st.batch = a.batch; st.betterAt = a.betterAt;
+  // 0.5.2: batch, better-result roll and time from the assessment made now (Approve may have lowered the batch).
+  Object.assign(st, CM.assessedState(a, Data.rules()));
   try {
     const r = await apply(actor, recipe, a, success, better);
     st.state = success ? "done" : "failed";

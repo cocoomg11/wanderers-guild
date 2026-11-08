@@ -224,6 +224,7 @@ export const craftWindowHTML = v => (v.mode === "recipes" ? recipesPageHTML(v) :
  * @property {number} [batch] how many were crafted in one go (0.5)
  * @property {boolean} [better] the roll made the better result
  * @property {string} [betterName] the better item's name, when it replaced the normal result
+ * @property {string} [betterRarity] the better item's rarity key (0.5.2: the header's colour when it was made)
  * @property {number | null} [betterAt] the total the better result needed (DC + margin), when there was one
  */
 
@@ -231,7 +232,10 @@ const STATE_TEXT = { pending: "Waiting for the GM", done: "Crafted", failed: "Fa
 
 /** The craft chat card (GM buttons carry `data-wg-choice` and the `wg-gm-only` class; craft-leader.mjs hides them from players). @param {CardView} c */
 export function cardHTML(c) {
-  const q = qualityOf(c.rarity);
+  // 0.5.2: when the better item was made, the header shows that item (name, picture, rarity), not the recipe's normal result.
+  const madeBetter = !!(c.better && c.state === "done" && c.betterName);
+  const head = madeBetter ? String(c.betterName) : c.recipeName;
+  const q = qualityOf(madeBetter && c.betterRarity ? c.betterRarity : c.rarity);
   const noDc = c.dc === null && c.state === "done" ? ` <span class="wg-dim">(no DC set: crafted)</span>` : "";
   const atBetter = c.betterAt !== null && c.betterAt !== undefined && c.state !== "done" && c.state !== "failed" ? ` <span class="wg-dim">(better result on ${c.betterAt})</span>` : "";
   const roll = c.total === null ? "" : `<p class="wg-cline"><span>${esc(c.toolLabel)} check</span><b>${c.total}${c.dc === null ? "" : ` vs DC ${c.dc}`}${noDc}${atBetter}</b></p>`;
@@ -248,8 +252,8 @@ export function cardHTML(c) {
       <p class="wg-dim wg-player-only">The GM approves each craft; nothing is made or used up until then.</p>`;
   }
   return `<div class="${UI_CLASSES.join(" ")} wg-chat wg-chat-${esc(c.state)}">
-    <header class="wg-chead">${itemSlot({ img: c.img || "icons/svg/item-bag.svg", name: c.recipeName, rarity: q, count: c.qty })}
-      <div><b class="wc-q-text" data-quality="${esc(q)}">${esc(c.recipeName)}</b><span class="wg-dim">${esc(c.actorName)} · ${esc(STATE_TEXT[c.state] ?? c.state)}</span></div></header>
+    <header class="wg-chead">${itemSlot({ img: c.img || "icons/svg/item-bag.svg", name: head, rarity: q, count: c.qty })}
+      <div><b class="wc-q-text" data-quality="${esc(q)}">${esc(head)}</b><span class="wg-dim">${esc(c.actorName)} · ${esc(STATE_TEXT[c.state] ?? c.state)}</span></div></header>
     ${roll}${batch}${better}${time}${used}${coin}${reason}${buttons}</div>`;
 }
 

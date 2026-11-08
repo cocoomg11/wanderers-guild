@@ -284,3 +284,13 @@ export const learnCardFlag = (actorUuid, recipeId, source) => ({ v: LEARN_CARD_V
 
 /** The `wanderers-guild.learned` hook payload (ids only). @param {string} actorId @param {string} recipeId @param {string} source */
 export const learnedPayload = (actorId, recipeId, source) => ({ actorId, recipeId, source: SOURCES.includes(source) ? source : "gm" });
+
+/**
+ * Whether an actor belongs in *Teach to…* (0.5.2): a character-type actor that isn't an Item Piles pile or merchant (Item Piles can
+ * make piles of the character type; its own flag `flags.item-piles.data.enabled` marks them, read only).
+ * @param {{ type?: unknown, flags?: any } | null | undefined} actor
+ */
+export function teachable(actor) {
+  if (!actor || actor.type !== "character") return false;
+  return actor.flags?.["item-piles"]?.data?.enabled !== true;
+}

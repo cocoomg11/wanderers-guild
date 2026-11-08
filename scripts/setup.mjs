@@ -7,7 +7,7 @@
 import { UI_CLASSES } from "../vendor/wanderers-core/index.mjs";
 import { RememberedWindow, resetPlacement } from "../vendor/wanderers-core/foundry/index.mjs";
 import { ID, TITLE } from "./const.mjs";
-import { F, S, changed } from "./core.mjs";
+import { F, S, changed, warn } from "./core.mjs";
 import * as V from "./setup-view.mjs";
 import * as CV from "./craft-setup-view.mjs";
 import * as PM from "./professions-model.mjs";
@@ -21,6 +21,7 @@ import * as Cleanup from "./cleanup.mjs";
 import * as GM from "./gather-model.mjs";
 import * as GV from "./gather-view.mjs";
 import * as LearnGM from "./learn-gm.mjs";
+import * as LM from "./learn-model.mjs";
 
 /** @type {SetupApp | null} */
 let app = null;
@@ -55,6 +56,10 @@ export class SetupApp extends Base {
     this.recipeFilter = "";
     /** @type {any[] | null} */
     this.report = null;
+    /** The key ("s:l") of the health fix that is running, or null. @type {string | null} */
+    this.busy = null;
+    /** The notice of the last health fix. @type {{ level: string, text: string } | null} */
+    this.fixed = null;
     /** @type {GM.GatherRules | null} unsaved gathering rules (rows added or removed, items dropped) */
     this.gatherDraft = null;
   }
@@ -105,7 +110,7 @@ export class SetupApp extends Base {
     }
     if (this.page === "health") {
       if (!this.report) { try { this.report = Health.run(); } catch (e) { this.report = [{ title: TITLE, lines: [{ level: "warn", text: String(/** @type {any} */ (e)?.message ?? e) }] }]; } }
-      return V.healthPage({ report: this.report });
+      return V.healthPage({ report: this.report, busy: this.busy, fixed: this.fixed });
     }
     return V.dataPage({ rows: Cleanup.dryRunRows() });
   }
@@ -152,7 +157,7 @@ export class SetupApp extends Base {
   /** @param {PointerEvent} event @param {HTMLElement} target */
   async _onClickAction(event, target) {
     const a = target.dataset.action; const id = target.dataset.id ?? "";
-    if (a === "nav") { this.page = V.pickPage(target.dataset.page, hiddenPages()); if (this.page === "health") this.report = null; return this.render(); }
+    if (a === "nav") { this.page = V.pickPage(target.dataset.page, hiddenPages()); if (this.page === "health") { this.report = null; this.fixed = null; } return this.render(); }
     if (a === "profNew") { this.editing = "new"; return this.render(); }
     if (a === "profEdit") { this.editing = id; return this.render(); }
     if (a === "profCancel") { this.editing = null; return this.render(); }
@@ -207,8 +212,27 @@ export class SetupApp extends Base {
     }
     if (a === "ioDownload") return this.#download(/** @type {any} */ (["rules", "gather"].includes(String(target.dataset.kind)) ? target.dataset.kind : "recipes"));
     if (a === "ioImport") return this.#import(/** @type {any} */ (["rules", "gather"].includes(String(target.dataset.kind)) ? target.dataset.kind : "recipes"));
-    if (a === "healthRun") { this.report = null; return this.render(); }
+    if (a === "healthRun") { if (this.busy) return; this.report = null; this.fixed = null; return this.render(); }
+    if (a === "healthFix") return this.#healthFix(String(target.dataset.fix ?? ""));
     if (a === "resetWindows") { await resetPlacement(ID); ui.notifications.info(`${TITLE}: window positions reset (open windows move when reopened).`); }
+  }
+
+  /**
+   * A health line's Fix button (GM click). Busy from the first click, before the confirm, so a double-click opens one dialog and
+   * runs once; then the report runs again so the page shows the new state. @param {string} key
+   */
+  async #healthFix(key) {
+    if (!game.user?.isGM || this.busy) return;
+    const f = V.fixAt(this.report, key);
+    if (!f) { ui.notifications.warn(`${TITLE}: that fix is no longer offered; run the check again.`); return; }
+    this.busy = key;
+    try {
+      if (f.confirm && !await confirm(f.label, f.confirm)) return;
+      this.render();
+      try { this.fixed = V.fixNotice(f.label, await f.run()); }
+      catch (e) { warn("fix", e); this.fixed = { level: "warn", text: `${f.label}: failed (${String(/** @type {any} */ (e)?.message ?? e).slice(0, 120)}).` }; }
+      try { this.report = Health.run(); } catch (e) { warn("health", e); this.report = null; }
+    } finally { this.busy = null; this.render(); }
   }
 
   /** The Gathering page's rules as on screen (normalized; rows without a profession or type are dropped). @param {HTMLFormElement | null} form */
@@ -330,7 +354,7 @@ export class SetupApp extends Base {
    */
   async #teachTo(id) {
     const r = Data.recipes().list.find(x => x.id === id); if (!r) return;
-    const all = (game.actors?.contents ?? []).filter((/** @type {any} */ a) => a.type === "character")
+    const all = (game.actors?.contents ?? []).filter((/** @type {any} */ a) => LM.teachable(a))
       .sort((/** @type {any} */ a, /** @type {any} */ b) => Number(b.hasPlayerOwner) - Number(a.hasPlayerOwner) || a.name.localeCompare(b.name));
     const actors = all.map((/** @type {any} */ a) => ({ uuid: a.uuid, name: a.name, known: RC.knows(r, Data.known(a)), note: a.hasPlayerOwner ? "" : "no player" }));
     let picked = [];

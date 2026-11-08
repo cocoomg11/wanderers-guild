@@ -45,7 +45,8 @@ export async function pay(actor, amount, reason) {
   if (!(amount > 0)) return true;
   if (purse(actor) < amount) throw new Error("not enough coin");
   const tk = toolkit();
-  if (tk && typeof tk.pay === "function") { await tk.pay(actor, amount, { reason }); return true; }
+  // The toolkit's pay (2.3.2+) returns false and takes nothing on a short purse; older ones return nothing.
+  if (tk && typeof tk.pay === "function") { if (await tk.pay(actor, amount, { reason }) === false) throw new Error("not enough coin"); return true; }
   const plan = payPlan(actor.system?.currency ?? {}, amount, D5.coinValues());
   if (plan.error || !plan.currency) throw new Error(plan.error ?? "not enough coin");
   await actor.update({ "system.currency": plan.currency });

@@ -447,6 +447,15 @@ export function resultPlan(r, o) {
 }
 
 /**
+ * The card state fields that follow the assessment made when a craft resolves (0.5.2): the batch, the better-result roll and the
+ * time text, so a batch lowered between the pending card and Approve shows its own time.
+ * @param {{ batch: number, betterAt: number | null, hours: number | null }} a @param {{ hoursPerDay: number | null }} rules
+ */
+export function assessedState(a, rules) {
+  return { batch: a.batch, betterAt: a.betterAt, timeText: hoursText(a.hours, rules.hoursPerDay) };
+}
+
+/**
  * What the better result is, as text for the window ("+2 more", "Fine Sword instead", "Fine Sword ×3 instead"), "" when none.
  * @param {import("./recipes-model.mjs").Recipe} r
  */

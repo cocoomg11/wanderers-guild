@@ -37,7 +37,7 @@ The Crafting window and the chat card show how long a craft takes, in game, for 
 
 ## Prices: book values or the world's coins
 
-By default prices show **book values**: the item's price in standard gold, silver and copper (1 gp = 10 sp = 100 cp). With Wanderer's Toolkit active, the switch *Prices in the world's coins* (setup › Settings) shows them in the toolkit's coins instead (its three-coin economy), and a coin cost is paid through the toolkit, which records it in its coin log. Gold-piece figures on the rules page and in recipes are gold pieces of the economy in use. The toolkit is never needed.
+By default prices show **book values**: the item's price in standard gold, silver and copper (1 gp = 10 sp = 100 cp). With Wanderer's Toolkit active, the switch *Prices in the world's coins* (setup › Settings) shows them in the toolkit's coins instead (its three-coin economy). Gold-piece figures on the rules page and in recipes are gold pieces of the world's coins, and a charged coin cost is always taken from the character's coins at the world's values: with the toolkit active it is paid through the toolkit (switch on or off), which records it in its coin log; without it, Wanderer's Guild takes it and gives change itself. The toolkit is never needed.
 
 ## Recipes
 

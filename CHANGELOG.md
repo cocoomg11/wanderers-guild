@@ -2,6 +2,38 @@
 
 All notable changes to Wanderer's Guild. Versions follow the `version` in `module.json`.
 
+## 0.5.2 (2026-11-08)
+
+Fixes from the live test of 0.5.1.
+
+### Fixed
+
+- **Fix buttons on the setup window's Health page.** Health lines with a fix (*Stamp recipe items*, *Add starter set*) now have a button there too, not only in Wanderer's Satchel. A click asks first, runs once (a double-click opens one dialog), then the check runs again.
+- **Approve with a lowered batch shows the right time.** When *Batches* was lowered between the roll and the GM's Approve, the card kept the time of the batch first asked for; it now shows the time of the batch made.
+- **Better-result card header.** When the better item was made, the card's header shows that item (name, picture, rarity colour) instead of the recipe's normal item.
+- **Teach to… lists characters only.** Item Piles piles and merchants (which can be character-type actors) are no longer offered.
+- **Coin cost and a short purse.** If Wanderer's Toolkit's `pay` refuses (2.3.2+ returns false and takes nothing), the craft now reports it instead of carrying on as paid.
+
+### Changed (docs)
+
+- **Coin costs are paid through the toolkit whenever it is active.** This is intended: a recipe's coin cost is gold pieces of the world's coins (that is how the amount is worked out), so it goes through the toolkit's `pay` and shows in its coin log whether or not *Prices in the world's coins* is on. The switch only changes how item prices are shown. The setting hint, README and docs/crafting.md now say so.
+- README *Recipe items and honesty*: copies dragged from the Items sidebar onto a sheet and Item Piles purchases leave Foundry's `_stats.compendiumSource` / `_stats.duplicateSource` empty, so only the mark's `src` carries the source; a player can set `_stats.compendiumSource` on their own item from the console (Foundry 14.370 accepts it), which helps no more than copying `src`.
+
+### Under the hood
+
+- setup-view.mjs `fixAt`, `fixNotice`, `healthPage({ report, busy, fixed })`; setup.mjs `#healthFix` (action `healthFix`). craft-model.mjs `assessedState(a, rules)` (batch, betterAt, timeText), used by craft-leader.mjs `finish`. learn-model.mjs `teachable(actor)` (reads Item Piles' `flags.item-piles.data.enabled`, read only). Card view `betterRarity`.
+- Tests: `tests/v052.test.mjs` (version asserts moved here).
+
+### Untested in Foundry
+
+Check on Foundry 14.370 with dnd5e 6.0.6, Item Piles 3.3.4 and Wanderer's Toolkit, as the GM (and a player where noted):
+
+- [ ] Setup › Health with an unstamped world recipe item: *Stamp recipe items* button, confirm, the line goes away after the re-check; a double-click opens one dialog. Without the Satchel active too.
+- [ ] *GM approves each craft*, batch 3, lower *Batches* to 2, Approve: the card's Time is the batch-2 time.
+- [ ] A better result with a different item: the card header shows that item's name, picture and colour; a normal success still shows the recipe's item.
+- [ ] Teach to… with an Item Piles pile or merchant in the world: not listed; characters are.
+- [ ] A craft with a coin cost in a three-coin world, *Prices in the world's coins* off: the right amount leaves the purse and the coin log has the entry (as before).
+
 ## 0.5.1 (2026-11-08)
 
 Fixes before release. 0.4.0 and 0.5.0 were not published on their own: this release brings recipe learning and recipe items (0.4.0), better results and batches (0.5.0) and these fixes.

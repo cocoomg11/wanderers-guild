@@ -3,7 +3,7 @@
  * (`wc-shell` › `nav.wc-side` › `wc-nav`, `wc-main`) and components; setup.mjs routes the `data-action` clicks and reads the forms
  * with `readProfessionForm` / `readRanksForm`. Every value is escaped.
  */
-import { navItem, statusLines, badge } from "../vendor/wanderers-core/index.mjs";
+import { navItem, statusLine, badge, readFix } from "../vendor/wanderers-core/index.mjs";
 import { esc, TITLE } from "./const.mjs";
 import { KINDS, KIND_KEYS, ICONS, ICON_KEYS, ACTIONS, ACTION_KEYS, KIND_ACTIONS, DEFAULT_CHECK, NAME_MAX, NOTES_MAX, PROFESSIONS_MAX } from "./professions-model.mjs";
 import { RANKS_MAX, BONUS_MIN, BONUS_MAX, RANK_NAME_MAX, signed } from "./ranks-model.mjs";
@@ -152,11 +152,45 @@ export function settingsPage(m) {
     + `<p class="wc-row"><button type="button" class="wc-btn wc-btn-ghost" data-action="resetWindows">Reset window positions</button></p>`;
 }
 
-/** The Health page. @param {{ report: Array<{ title: string, lines: Array<{ level: string, text: string }> }> | null }} m */
+/** A health fix key: "section:line". */
+export const FIX_KEY_RE = /^\d{1,3}:\d{1,4}$/;
+
+/**
+ * The fix of the report line at `key` ("s:l"), or null (bad key, no line, no fix, or a fix without `run`: an action id only the
+ * Satchel resolves). @param {unknown} report @param {unknown} key @returns {{ label: string, run: () => unknown, confirm?: string } | null}
+ */
+export function fixAt(report, key) {
+  if (typeof key !== "string" || !FIX_KEY_RE.test(key) || !Array.isArray(report)) return null;
+  const [s, l] = key.split(":").map(Number);
+  const f = readFix(report[s]?.lines?.[l]?.fix);
+  return f && typeof f.run === "function" ? /** @type {any} */ (f) : null;
+}
+
+/** The notice after a fix ran: its own text when it returned one, else a generic line. @param {string} label @param {unknown} result */
+export function fixNotice(label, result) {
+  if (result === false) return { level: "warn", text: `${label}: nothing was changed.` };
+  if (typeof result === "string" && result.trim()) return { level: "info", text: result.trim().slice(0, 300) };
+  return { level: "info", text: `${label}: done.` };
+}
+
+/**
+ * The Health page. A line with a fix (one with `run`) gets a Fix button (`data-action="healthFix"`, `data-fix` "s:l"); `busy` is
+ * the key of the fix that is running (its button disabled, "Working…"); `fixed` the notice of the last fix.
+ * @param {{ report: Array<{ title: string, lines: Array<{ level: string, text: string, fix?: unknown }> }> | null, busy?: string | null, fixed?: { level: string, text: string } | null }} m
+ */
 export function healthPage(m) {
+  const busy = m.busy ?? null;
+  const notice = m.fixed ? `<ul class="wc-lines">${statusLine(String(m.fixed.level), String(m.fixed.text))}</ul>` : "";
   const body = m.report === null ? `<p class="wc-hint">Checking…</p>`
-    : m.report.map(s => `<section class="wc-panel"><header class="wc-panel-head"><h3>${esc(s.title || TITLE)}</h3></header><div class="wc-panel-body">${statusLines(/** @type {any} */ (s.lines))}</div></section>`).join("");
-  return pagehead("Health", `<span class="wc-hint">Read-only: the check changes nothing.</span>`, `<button type="button" class="wc-btn" data-action="healthRun">Run again</button>`) + body;
+    : m.report.map((sec, s) => {
+      const lines = (Array.isArray(sec?.lines) ? sec.lines : []).map((line, l) => {
+        const key = `${s}:${l}`; const f = fixAt(m.report, key);
+        const btn = f ? ` <button type="button" class="wc-btn wc-btn-sm wg-fix" data-action="healthFix" data-fix="${key}"${busy ? " disabled" : ""}>${esc(busy === key ? "Working…" : f.label)}</button>` : "";
+        return statusLine(String(line?.level ?? "info"), String(line?.text ?? ""), { html: btn });
+      }).join("");
+      return `<section class="wc-panel"><header class="wc-panel-head"><h3>${esc(sec.title || TITLE)}</h3></header><div class="wc-panel-body"><ul class="wc-lines">${lines}</ul></div></section>`;
+    }).join("");
+  return pagehead("Health", `<span class="wc-hint">The check changes nothing; a Fix button asks first.</span>`, `<button type="button" class="wc-btn" data-action="healthRun"${busy ? " disabled" : ""}>Run again</button>`) + notice + body;
 }
 
 /**
