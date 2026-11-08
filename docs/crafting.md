@@ -79,13 +79,13 @@ A recipe item is any item that teaches a recipe, like a spell scroll: sell it fr
 - Learning uses one item up (lowers the stack, or deletes the last one) unless the GM ticked *Kept after learning*.
 - A recipe item for a *GM only* recipe can't be used (the health check warns).
 
-The GM's client checks a recipe item request too: the item must be in that character's own inventory, and the recipe comes from the item's mark as stored, never from what the player's client sends.
+The GM's client checks a recipe item request too: the item must be in that character's own inventory, and the recipe comes from the item's mark as stored, never from what the player's client sends. Since 0.5.1 a player's copy must also come from a recipe item the GM marked: a world item (no player owning it) or a compendium item, whose own mark teaches the same recipe (its *keep / use up* choice wins). Marking an item and *Make recipe item* stamp the world item's UUID into the mark, and copies keep it (bought from an Item Piles merchant, dragged to a sheet, or put in a compendium). Items marked before 0.5.1: press *Stamp recipe items* in the health check. If you make recipe items directly on characters, turn on **Trust recipe items without a source** (setup › Settings). This is still partly an honor system: a player editing their own items from the console can copy a real recipe item's mark (README, *Recipe items and honesty*).
 
 ## Better results and batches
 
 Both are off until the GM sets a number on the Crafting rules page.
 
-**Better result.** Each recipe can have one (recipe editor › *Better result*): **Extra made** (made on top of the recipe's normal quantity) and/or a different item, dropped on the box (**Or makes**), made **instead of** the normal item. When a craft succeeds and the roll reaches the DC plus the rules' *Better result margin*, the better result is made and the card says *Better result*. No DC (the recipe's, its rarity's or the base DC), no margin, or a recipe without one: no better result, ever. Materials, time and cost are the same as a normal craft.
+**Better result.** Each recipe can have one (recipe editor › *Better result*): **Extra made** (made on top of the recipe's normal quantity) and/or a different item, dropped on the box (**Or makes**), made **instead of** the normal item. When a craft succeeds and the roll reaches the DC plus the rules' *Better result margin*, the better result is made and the card says *Better result*. No DC (the recipe's, its rarity's or the base DC), no margin, or a recipe without one: no better result, ever. Materials, time and cost are the same as a normal craft. The better item may be rarer than the recipe: that is allowed (the crafter's rank is checked against the recipe's rarity only, so a great roll can make something the crafter couldn't craft on purpose); the health check notes each recipe whose better result is rarer than the recipe, in case it was a slip.
 
 **Batches.** With *Batches* set to, say, 5, the Craft page shows **How many** (1–5) next to the Craft button. One tool check decides the whole batch:
 
@@ -124,7 +124,7 @@ A GM must be connected to craft and learn (their client does the writing). A pla
 
 - World settings: `recipeBook` (the recipes) and `craftRules`.
 - On characters: `flags.wanderers-guild.recipes` (known recipe ids).
-- On items: `flags.wanderers-guild.teaches` (`{ v, recipe, consume }`: the recipe item mark, set by the GM on world items); used-up recipe items are lowered or deleted.
+- On items: `flags.wanderers-guild.teaches` (`{ v, recipe, consume, src }`: the recipe item mark, set by the GM on world items; `src` is that world item's UUID); used-up recipe items are lowered or deleted.
 - Learn cards (`flags.wanderers-guild.learn`).
 - On the character's items: the crafted item, lowered or deleted material stacks, and the coin (`system.currency`, or the toolkit's payment).
 - Chat: the craft cards and short notices (`flags.wanderers-guild.craft` / `.notice`), and a mark on each tool check roll used for a craft (`flags.wanderers-guild.craftRoll` / `.rollUsed`).

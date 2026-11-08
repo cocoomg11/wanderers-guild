@@ -65,7 +65,7 @@ test("features, settings and requests are well formed", () => {
   assert.deepEqual(F.FEATURES.find(f => f.id === "crafting").needs, ["professions"]);
   assert.ok(F.FEATURES.every(f => f.key === `feature-${f.id}`));
   assert.deepEqual(F.FEATURES.find(f => f.id === "sheetButton").needs, ["professions"]);
-  assert.deepEqual(S.ROWS.map(r => r.key), ["professionList", "rankTable", "showUnlearned", "recipeBook", "craftRules", "playersLearn", "undiscoveredRecipes", "craftApproval", "worldCoins", "gatherRules", "gatherReset", "gatherOnce", "gatherArea", "gatherJourney", "debugLog"]);
+  assert.deepEqual(S.ROWS.map(r => r.key), ["professionList", "rankTable", "showUnlearned", "recipeBook", "craftRules", "playersLearn", "trustRecipeItems", "undiscoveredRecipes", "craftApproval", "worldCoins", "gatherRules", "gatherReset", "gatherOnce", "gatherArea", "gatherJourney", "debugLog"]);
   assert.deepEqual(Object.keys(REQUESTS), ["learnRecipe", "forgetRecipe", "learnFromItem", "craft", "craftDecide", "gather", "gatherReset"]);
   assert.equal(HOOKS.crafted, `${ID}.crafted`);
   assert.equal(HOOKS.ready, `${ID}.ready`);

@@ -3,7 +3,8 @@
  * (`flags.wanderers-guild.teaches`, dropped on the recipe editor's *Taught by item*), its keep / use-up choice, unmarking it,
  * *Make recipe item* (a new world loot item "Recipe: X") and *Teach to…* (one `learnRecipe` request per character, sent as the GM,
  * so the leader writes, posts the learn cards and fires the hook). This file writes only world items (the Items sidebar): never an
- * actor, never an embedded item (characters' copies are written by the leader in craft-leader.mjs). Untested in Node; the flag shape
+ * actor, never an embedded item (characters' copies are written by the leader in craft-leader.mjs). Every write stamps the flag's
+ * `src` with the world item's own UUID (0.5.1): copies keep it, and the leader checks a player's copy against that world item. Untested in Node; the flag shape
  * and the item data are in learn-model.mjs.
  */
 import { ID, TITLE } from "./const.mjs";
@@ -39,7 +40,7 @@ export async function setTeaches(uuid, recipeId) {
   if (!item) { ui.notifications.warn(`${TITLE}: drop an item from the Items sidebar (import a compendium item first).`); return false; }
   if (!Data.recipes().list.some(r => r.id === recipeId)) { ui.notifications.warn(`${TITLE}: save the recipe first.`); return false; }
   const before = LM.normalizeTeaches(item.flags?.[ID]?.teaches);
-  await item.setFlag(ID, "teaches", LM.teachesFlag(recipeId, before?.consume ?? true));
+  await item.setFlag(ID, "teaches", LM.teachesFlag(recipeId, before?.consume ?? true, item.uuid));
   log(`${item.name} teaches ${recipeId}`);
   return true;
 }
@@ -49,7 +50,7 @@ export async function setKeep(uuid, keep) {
   if (!gm()) return false;
   const item = worldItem(uuid); const t = LM.normalizeTeaches(item?.flags?.[ID]?.teaches);
   if (!item || !t) return false;
-  await item.setFlag(ID, "teaches", LM.teachesFlag(t.recipe, !keep));
+  await item.setFlag(ID, "teaches", LM.teachesFlag(t.recipe, !keep, item.uuid));
   return true;
 }
 
@@ -67,7 +68,7 @@ export async function makeRecipeItem(recipeId) {
   const r = Data.recipes().list.find(x => x.id === recipeId);
   if (!r) { ui.notifications.warn(`${TITLE}: save the recipe first.`); return null; }
   const p = Data.professions().list.find(x => x.id === r.profession);
-  const item = await Item.implementation.create(LM.recipeItemData(r, p?.name ?? "", escape));
+  const item = await Item.implementation.create(LM.recipeItemData(r, p?.name ?? "", escape, foundry.utils.randomID()), { keepId: true });
   if (item) ui.notifications.info(`${TITLE}: ${item.name} is in the Items sidebar. Put it in a merchant's stock, a loot pile or a character's inventory.`);
   return item ?? null;
 }
@@ -83,5 +84,22 @@ export async function teachTo(recipeId, actors) {
   let n = 0;
   for (const a of actors) if (a?.uuid && leader.request("learnRecipe", { actor: a.uuid, recipe: recipeId })) n += 1;
   if (!n && actors.length) ui.notifications.warn(`${TITLE}: couldn't reach the writing GM client.`);
+  return n;
+}
+
+/**
+ * Stamps every world recipe item's flag with its own UUID as `src` (health fix; GM click). Resolves to how many were stamped.
+ * @returns {Promise<number>}
+ */
+export async function stampSources() {
+  if (!gm()) return 0;
+  let n = 0;
+  for (const item of game.items?.contents ?? []) {
+    const t = LM.normalizeTeaches(item.flags?.[ID]?.teaches);
+    if (!t || t.src === item.uuid) continue;
+    await item.setFlag(ID, "teaches", LM.teachesFlag(t.recipe, t.consume, item.uuid));
+    n += 1;
+  }
+  if (n) log(`stamped ${n} recipe item(s)`);
   return n;
 }

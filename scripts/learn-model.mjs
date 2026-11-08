@@ -7,8 +7,10 @@
  *   recipe, the recipe must not be *GM only*, and profession and rank apply as above. One item is used up unless it is set to keep.
  * - "gm": a GM teaches (Teach, Teach to…): no checks but the recipe existing.
  *
- * Recipe items: the item flag `teaches` (`{ v, recipe, consume }`) is set by a GM on a world item (learn-gm.mjs); dnd5e copies flags
- * with the item, so a copy bought from a merchant or handed out still teaches. Also the Recipes page's row states, the Professions
+ * Recipe items: the item flag `teaches` (`{ v, recipe, consume, src }`) is set by a GM on a world item (learn-gm.mjs; `src` = that
+ * world item's UUID); dnd5e and Item Piles copy flags with the item, so a copy bought from a merchant or handed out still teaches.
+ * A player's carried copy teaches only when it points at a GM-authored source (`sourceRefs` → `verifyTeaches`, 0.5.1): a world item
+ * or a compendium item no player can edit whose own flag teaches the same recipe; the source's `consume` wins. Also the Recipes page's row states, the Professions
  * window's recipe item rows, the health lines about recipe items and the data of a new recipe item.
  */
 import { versioned } from "../vendor/wanderers-core/index.mjs";
@@ -27,7 +29,7 @@ export const RECIPE_ITEM_IMG = "icons/svg/book.svg";
 export const LEARN_CARD_VERSION = 1;
 
 /**
- * @typedef {{ v: number, recipe: string, consume: boolean }} Teaches
+ * @typedef {{ v: number, recipe: string, consume: boolean, src: string }} Teaches
  * @typedef {import("./recipes-model.mjs").Recipe} Recipe
  * @typedef {object} LearnFacts plain facts about one character and the user asking
  * @property {boolean} isGM the user asking is a GM
@@ -47,16 +49,70 @@ export const LEARN_CARD_VERSION = 1;
  */
 const readTeaches = versioned({
   version: TEACHES_VERSION,
-  empty: () => ({ v: TEACHES_VERSION, recipe: "", consume: true }),
+  empty: () => ({ v: TEACHES_VERSION, recipe: "", consume: true, src: "" }),
   // A flag written without a version (by hand or a macro) reads as v1.
   upgrades: { 0: t => t },
-  clean: t => ({ v: TEACHES_VERSION, recipe: ID_RE.test(String(t?.recipe ?? "")) ? String(t.recipe) : "", consume: t?.consume !== false })
+  // `src` (0.5.1, optional, no version bump: missing = "") is the world item the GM marked.
+  clean: t => ({ v: TEACHES_VERSION, recipe: ID_RE.test(String(t?.recipe ?? "")) ? String(t.recipe) : "", consume: t?.consume !== false, src: SOURCE_RE.test(String(t?.src ?? "")) ? String(t.src) : "" })
 });
 /** @param {unknown} raw @returns {Teaches | null} */
 export const normalizeTeaches = raw => { const t = readTeaches(raw); return t && t.recipe ? t : null; };
 
-/** The flag a GM writes on a world item. @param {string} recipeId @param {boolean} [consume] @returns {Teaches} */
-export const teachesFlag = (recipeId, consume = true) => ({ v: TEACHES_VERSION, recipe: recipeId, consume: !!consume });
+/**
+ * The flag a GM writes on a world item; `src` is that item's own UUID, so copies carry a pointer back to it.
+ * @param {string} recipeId @param {boolean} [consume] @param {string} [src] @returns {Teaches}
+ */
+export const teachesFlag = (recipeId, consume = true, src = "") => ({ v: TEACHES_VERSION, recipe: recipeId, consume: !!consume, src: SOURCE_RE.test(String(src)) ? String(src) : "" });
+
+/** A source a recipe item can name: a world item or a compendium item (never an item on an actor). */
+export const SOURCE_RE = /^(?:Item\.[A-Za-z0-9]{16}|Compendium\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.Item\.[A-Za-z0-9]{16})$/;
+
+/**
+ * Where a source UUID lives: `{ kind: "world", id }`, `{ kind: "pack", pack: "<package>.<name>", id }`, or null.
+ * @param {unknown} uuid @returns {{ kind: "world", id: string } | { kind: "pack", pack: string, id: string } | null}
+ */
+export function parseSource(uuid) {
+  const u = String(uuid ?? "");
+  if (!SOURCE_RE.test(u)) return null;
+  const p = u.split(".");
+  return p[0] === "Item" ? { kind: "world", id: p[1] } : { kind: "pack", pack: `${p[1]}.${p[2]}`, id: p[4] };
+}
+
+/**
+ * The sources a carried item names, in the order they are tried: our flag's `src` (stamped by the GM's marking, copied with the
+ * flags), then Foundry's `_stats.compendiumSource` and `_stats.duplicateSource`, then the legacy `flags.core.sourceId`. Only world
+ * and compendium item UUIDs count; duplicates are dropped.
+ * @param {any} source the carried item's source data (`item._source`) @returns {string[]}
+ */
+export function sourceRefs(source) {
+  const s = source ?? {};
+  const raw = [s.flags?.["wanderers-guild"]?.teaches?.src, s._stats?.compendiumSource, s._stats?.duplicateSource, s.flags?.core?.sourceId];
+  return [...new Set(raw.map(x => String(x ?? "")).filter(x => SOURCE_RE.test(x)))];
+}
+
+/**
+ * Whether a carried item's `teaches` flag is backed by a GM-authored source. `sources` maps each found source UUID to its own
+ * (raw) `teaches` flag and whether it is trusted (no player can edit it); sources not found are simply absent. The first trusted
+ * source teaching the same recipe wins and its flag is returned (so its *keep / use up* choice applies, not the copy's).
+ * @param {Teaches | null} teaches the carried copy's flag, normalized
+ * @param {string[]} refs from `sourceRefs`
+ * @param {Map<string, { teaches: unknown, trusted: boolean }>} sources
+ * @returns {{ ok: true, source: string, teaches: Teaches } | { ok: false, code: "noFlag" | "noSource" | "untrusted" | "mismatch", reason: string }}
+ */
+export function verifyTeaches(teaches, refs, sources) {
+  if (!teaches) return { ok: false, code: "noFlag", reason: "it doesn't teach a recipe." };
+  let untrusted = false; let mismatch = false;
+  for (const ref of refs) {
+    const s = sources.get(ref); if (!s) continue;
+    const t = normalizeTeaches(s.teaches);
+    if (!t || t.recipe !== teaches.recipe) { mismatch = true; continue; }
+    if (!s.trusted) { untrusted = true; continue; }
+    return { ok: true, source: ref, teaches: t };
+  }
+  if (untrusted) return { ok: false, code: "untrusted", reason: "the recipe item it was copied from can be edited by a player, so it can't vouch for it. Ask your GM." };
+  if (mismatch) return { ok: false, code: "mismatch", reason: "it doesn't match the recipe item it was copied from. Ask your GM." };
+  return { ok: false, code: "noSource", reason: "the recipe item it was copied from can't be found (the GM may have deleted or unmarked it). Ask your GM." };
+}
 
 /** Whether `itemUuid` names an item embedded directly on the actor `actorUuid` ("<actor>.Item.<id>"). @param {unknown} itemUuid @param {unknown} actorUuid */
 export function itemOnActor(itemUuid, actorUuid) {
@@ -175,7 +231,7 @@ export function recipeItemRows(items, recipes, f) {
 /**
  * Health lines about recipe items: items whose recipe is gone (warn), recipes learned only from an item that no item teaches (warn),
  * items teaching a GM-only recipe (warn: they can't teach it), and a count (info). `items` = world items and characters' items.
- * @param {Recipe[]} recipes @param {Array<{ name: string, teaches: unknown, where: string }>} items
+ * @param {Recipe[]} recipes @param {Array<{ uuid?: string, name: string, teaches: unknown, where: string }>} items
  * @returns {Array<{ level: "warn" | "info" | "ok", text: string }>}
  */
 export function recipeItemLines(recipes, items) {
@@ -197,15 +253,29 @@ export function recipeItemLines(recipes, items) {
 }
 
 /**
- * The world item *Make recipe item* creates: a loot item named "Recipe: <name>" with the recipe's rarity and our flag.
- * @param {Recipe} r @param {string} [professionName] @param {(s: string) => string} [escape]
+ * World recipe items whose flag doesn't name the item itself as its `src` (marked before 0.5.1, or moved): copies made from them
+ * can only be checked through Foundry's own source fields until a GM stamps them (health fix).
+ * @param {Array<{ uuid?: string, name: string, teaches: unknown, where: string }>} items
+ * @returns {Array<{ uuid: string, name: string }>}
  */
-export function recipeItemData(r, professionName = "", escape = s => s) {
+export function unstampedItems(items) {
+  return items.filter(i => i.where === "world" && i.uuid && normalizeTeaches(i.teaches) && normalizeTeaches(i.teaches)?.src !== i.uuid)
+    .map(i => ({ uuid: String(i.uuid), name: i.name }));
+}
+
+/**
+ * The world item *Make recipe item* creates: a loot item named "Recipe: <name>" with the recipe's rarity and our flag.
+ * @param {Recipe} r @param {string} [professionName] @param {(s: string) => string} [escape] @param {string} [id] the new item's
+ * id (created with `keepId`), so the flag's `src` can name it
+ */
+export function recipeItemData(r, professionName = "", escape = s => s, id = "") {
   const rarity = recipeRarity(r);
+  const own = /^[A-Za-z0-9]{16}$/.test(id) ? id : "";
   return {
+    ...(own ? { _id: own } : {}),
     name: `Recipe: ${r.name}`.slice(0, 120), type: "loot", img: RECIPE_ITEM_IMG,
     system: { ...(rarity ? { rarity } : {}), description: { value: `<p>Teaches the recipe <b>${escape(r.name)}</b>${professionName ? ` (${escape(professionName)})` : ""}. Use it from the Crafting window's Recipes page.</p>` } },
-    flags: { "wanderers-guild": { teaches: teachesFlag(r.id, true) } }
+    flags: { "wanderers-guild": { teaches: teachesFlag(r.id, true, own ? `Item.${own}` : "") } }
   };
 }
 

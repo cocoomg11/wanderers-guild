@@ -31,12 +31,12 @@ test("recipeBook v2: learn route, v1 reads as rank, import accepts v1 and v2", (
 });
 
 test("teaches flag: normalizer, consume default, bad shapes", () => {
-  assert.deepEqual(L.normalizeTeaches({ v: 1, recipe: "blade" }), { v: 1, recipe: "blade", consume: true });
-  assert.deepEqual(L.normalizeTeaches({ v: 1, recipe: "blade", consume: false }), { v: 1, recipe: "blade", consume: false });
-  assert.deepEqual(L.normalizeTeaches({ recipe: "blade" }), { v: 1, recipe: "blade", consume: true }, "no version reads as v1");
+  assert.deepEqual(L.normalizeTeaches({ v: 1, recipe: "blade" }), { v: 1, recipe: "blade", consume: true, src: "" });
+  assert.deepEqual(L.normalizeTeaches({ v: 1, recipe: "blade", consume: false }), { v: 1, recipe: "blade", consume: false, src: "" });
+  assert.deepEqual(L.normalizeTeaches({ recipe: "blade" }), { v: 1, recipe: "blade", consume: true, src: "" }, "no version reads as v1");
   for (const bad of [null, undefined, "x", {}, { v: 1, recipe: "Bad Id" }, { v: 1, recipe: "<b>" }, { v: 9, recipe: "blade" }]) assert.equal(L.normalizeTeaches(bad), null, JSON.stringify(bad));
-  assert.deepEqual(L.teachesFlag("blade"), { v: 1, recipe: "blade", consume: true });
-  assert.deepEqual(L.teachesFlag("blade", false), { v: 1, recipe: "blade", consume: false });
+  assert.deepEqual(L.teachesFlag("blade"), { v: 1, recipe: "blade", consume: true, src: "" });
+  assert.deepEqual(L.teachesFlag("blade", false), { v: 1, recipe: "blade", consume: false, src: "" });
 });
 
 test("itemOnActor: the item must be embedded on that actor", () => {
@@ -135,7 +135,7 @@ test("recipeItemRows and recipe item data", () => {
   assert.equal(rows[2].recipe, "");
   const d = L.recipeItemData(recipe({ name: "A <b>", rarity: "rare" }), "Smith & Co", s => s.replace(/</g, "&lt;").replace(/&(?!lt;)/g, "&amp;"));
   assert.equal(d.type, "loot"); assert.equal(d.name, "Recipe: A <b>"); assert.equal(d.system.rarity, "rare");
-  assert.deepEqual(d.flags["wanderers-guild"].teaches, { v: 1, recipe: "blade", consume: true });
+  assert.deepEqual(d.flags["wanderers-guild"].teaches, { v: 1, recipe: "blade", consume: true, src: "" });
   assert.ok(d.system.description.value.includes("A &lt;b>") && d.system.description.value.includes("Smith &amp; Co"));
   assert.equal(L.recipeItemData(recipe()).system.rarity, undefined, "mundane: no rarity");
 });

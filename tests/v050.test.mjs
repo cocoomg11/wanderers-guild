@@ -197,8 +197,5 @@ test("health: better item lines; versions", () => {
   const h = read("scripts/health.mjs");
   assert.match(h, /Better result item not found/);
   assert.match(h, /Batches: /);
-  const m = JSON.parse(read("module.json")); const pkg = JSON.parse(read("package.json"));
-  assert.equal(m.version, "0.5.0"); assert.equal(pkg.version, "0.5.0");
-  assert.ok(m.download.endsWith("/v0.5.0/module.zip"));
   assert.match(read("CHANGELOG.md"), /^## 0\.5\.0/m);
 });

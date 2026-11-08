@@ -278,6 +278,10 @@ export function recipeWarnings(book, professionIds) {
   if (noItem.length) out.push(`No result item for: ${few(noItem)} (crafting them makes nothing).`);
   const sameBetter = book.list.filter(r => r.better.uuid && r.better.uuid === r.result.uuid && r.better.qty === 0).map(r => r.name);
   if (sameBetter.length) out.push(`The better result is the normal item with no extra quantity for: ${few(sameBetter)} (a better roll changes nothing).`);
+  // 0.5.1: allowed on purpose (rank is checked against the recipe's rarity only), but worth a look.
+  const rank = (/** @type {string} */ k) => RARITY_KEYS.indexOf(/** @type {any} */ (k));
+  const above = book.list.filter(r => r.better.uuid && r.better.rarity && rank(r.better.rarity) > rank(recipeRarity(r))).map(r => r.name);
+  if (above.length) out.push(`The better result is rarer than the recipe for: ${few(above)} (allowed: a crafter's rank is checked against the recipe's rarity only, so a good roll can make a rarer item).`);
   return out;
 }
 

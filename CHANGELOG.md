@@ -2,6 +2,58 @@
 
 All notable changes to Wanderer's Guild. Versions follow the `version` in `module.json`.
 
+## 0.5.1 (2026-11-08)
+
+Fixes before release. 0.4.0 and 0.5.0 were not published on their own: this release brings recipe learning and recipe items (0.4.0), better results and batches (0.5.0) and these fixes.
+
+### Fixed
+
+- **Learning is queued per character.** Learn, Teach and Forget now wait their turn with crafts and *Learn from item* for the same character, so two quick clicks can't each read the old list and drop one recipe.
+- **Recipe items are checked against where they came from.** A player's recipe item teaches only when it is a copy of a recipe item the GM marked: a world item no player owns, or an item in a compendium no player can edit, whose own mark teaches the same recipe (its *keep / use up* choice applies, not the copy's). Otherwise the player gets a short notice saying why and nothing is learned. Marking an item (*Taught by item*, the keep switch) and *Make recipe item* write the world item's own UUID into the mark (`teaches.src`); copies keep it, including Item Piles purchases (they copy the item's data, flags included) and drags to a sheet. Foundry's own source fields (`_stats.compendiumSource`, `_stats.duplicateSource`, legacy `flags.core.sourceId`) count too. GMs learning from an item aren't checked.
+- New setting **Trust recipe items without a source** (setup › Settings, default off): for GMs who make recipe items directly on characters. The hint, README (*Recipe items and honesty*) and health say plainly what's left: a player who edits their own items from the console can still copy a real recipe item's mark.
+- *GM approves each craft*: Approve clamps the card's stored batch to the rules' *Batches* again before assessing (it was safe through `assess`, now guarded at the call too).
+
+### Added
+
+- Health: recipe items in the Items sidebar not stamped as a source yet (marked in a pre-release build), with a **Stamp recipe items** fix (GM click, confirm); which recipe item rule applies (info); a recipe whose better result is rarer than the recipe (warn; allowed on purpose, see docs/crafting.md).
+
+### Under the hood
+
+- learn-model.mjs: `teaches.src` (optional, no version bump; only world or compendium item UUIDs), `teachesFlag(recipe, consume, src)`, `SOURCE_RE`, `parseSource`, `sourceRefs`, `verifyTeaches`, `unstampedItems`; `recipeItemData(..., id)` (created with `keepId`). craft-leader.mjs: `teachingSources` reads sources from `game.items` and one `pack.getIndex({ fields: ["flags.wanderers-guild.teaches"] })` per pack (no `fromUuid`); player-editable = any non-GM user with OWNER on the item or the pack. learn-gm.mjs `stampSources()`.
+- The better result card hint still shows the margin stored when the roll was made; the outcome uses the rules at resolve time (cosmetic, left as is).
+- Tests: `tests/v051.test.mjs`.
+
+### Untested in Foundry
+
+Check on Foundry 14.370 with dnd5e 6.0.6 and Item Piles 3.3.4, as a player and as the GM:
+
+- [ ] Two quick Learn clicks on two recipes for one character: both are known afterwards. Learn racing *Learn from item*: both kept.
+- [ ] *Make recipe item*: the new world item's mark has `src` = its own UUID (`item.flags["wanderers-guild"].teaches`).
+- [ ] Drag that item onto a character: *Learn from item* works for the player. Check what the copy's `_stats.duplicateSource` / `compendiumSource` hold.
+- [ ] Put the item in an Item Piles merchant, buy it as a player: the bought copy keeps `teaches.src` and teaches.
+- [ ] Console as the player: `item.setFlag("wanderers-guild", "teaches", { recipe: "<other>" })` on a carried item, then *Learn from item*: refused ("doesn't match the recipe item it was copied from"). Also on a plain item with no source: refused ("can't be found"). Turn on *Trust recipe items without a source*: both learn.
+- [ ] Console as the player: try `item.update({ "_stats.compendiumSource": "<a real recipe item uuid>" })`: note whether Foundry accepts it (documents how strong the source check is).
+- [ ] Copy set to *Kept after learning* by the player while the world item uses up: one is used up.
+- [ ] A world recipe item put in a world compendium, deleted from the Items sidebar, a copy dragged from the compendium: still teaches (via `compendiumSource`).
+- [ ] A world recipe item owned by a player (Ownership: Owner): its copies are refused ("can be edited by a player").
+- [ ] Health: a world item marked with the 0.4/0.5 builds (no `src`) shows *not stamped as a source yet*; *Stamp recipe items* fixes it.
+- [ ] Health: a recipe with a better result rarer than the recipe shows the warning.
+- [ ] *GM approves each craft* with a batch: Approve makes the batch (clamped if *Batches* was lowered).
+- [ ] Everything on the 0.4.0 and 0.5.0 lists below.
+
+### Release notes (0.4.0 to 0.5.1)
+
+Ready to paste into the GitHub release:
+
+> **Recipes: learning, recipe items, better results and batches.**
+> - Each recipe is *Learned by* rank (players learn it themselves), a recipe item, or the GM only. GMs can teach a recipe to several characters at once.
+> - Recipe items work like spell scrolls: mark an item or press *Make recipe item*, sell it from a merchant or drop it as loot; a character carrying it presses *Learn from item*. A player's copy must come from a recipe item the GM marked (partly an honor system; see the README).
+> - *Recipes not known yet*: show them greyed with how to get each, or hide them.
+> - A learn card and the `wanderers-guild.learned` hook.
+> - Better results: a roll of the DC plus your margin makes extra items or a different item.
+> - Batches: craft several in one check (materials, time and cost multiplied).
+> - Every number is yours to set: nothing ships with rulebook figures.
+
 ## 0.5.0 (2026-11-08)
 
 Craft outcomes and batches: a better result for a high roll, and crafting several in one check. Both are off until the GM sets a number (no figures ship).

@@ -96,21 +96,60 @@ async function learnNow(actor, recipe, source, user) {
   return true;
 }
 
-/** Learn (a player, rank route) or Teach (a GM). @param {{ actor: string, recipe: string }} data @param {any} user */
+/**
+ * Learn (a player, rank route) or Teach (a GM). Runs one at a time per actor (with crafts and learn-from-item), so two quick
+ * learns can't each read the old list and drop the other's recipe.
+ * @param {{ actor: string, recipe: string }} data @param {any} user
+ */
 async function onLearn(data, user) {
-  const actor = await actorOf(data.actor); if (!actor) return log("learn: no such actor");
-  if (!owns(actor, user)) return log(`learn refused: ${user.name} doesn't own ${actor.name}`);
-  const recipe = Data.recipes().list.find(r => r.id === data.recipe); if (!recipe) return tell(user, actor, "That recipe no longer exists.");
-  const via = user.isGM ? "gm" : "rank";
-  const a = LM.assessLearn(learnFacts(actor, user), recipe, via);
-  if (!a.ok) { if (a.code !== "known") await tell(user, actor, a.reason); return; }
-  await learnNow(actor, recipe, via, user);
+  return serial(data.actor, async () => {
+    const actor = await actorOf(data.actor); if (!actor) return log("learn: no such actor");
+    if (!owns(actor, user)) return log(`learn refused: ${user.name} doesn't own ${actor.name}`);
+    const recipe = Data.recipes().list.find(r => r.id === data.recipe); if (!recipe) return tell(user, actor, "That recipe no longer exists.");
+    const via = user.isGM ? "gm" : "rank";
+    const a = LM.assessLearn(learnFacts(actor, user), recipe, via);
+    if (!a.ok) { if (a.code !== "known") await tell(user, actor, a.reason); return; }
+    await learnNow(actor, recipe, via, user);
+  });
+}
+
+/** Whether any player (non-GM user) can edit the document or pack. @param {any} doc */
+const playerEditable = doc => {
+  try { return game.users.some((/** @type {any} */ u) => !u.isGM && !!doc?.testUserPermission?.(u, "OWNER")); } catch { return true; }
+};
+
+/**
+ * The sources a carried recipe item names, read without loading documents: world items from `game.items`, compendium items from
+ * one `getIndex` (with our flag) per pack. Each found source: its own `teaches` flag and whether it is trusted (no player owns it
+ * or its pack). Missing or unreadable ones are left out.
+ * @param {string[]} refs from LM.sourceRefs @returns {Promise<Map<string, { teaches: unknown, trusted: boolean }>>}
+ */
+async function teachingSources(refs) {
+  /** @type {Map<string, { teaches: unknown, trusted: boolean }>} */
+  const out = new Map();
+  for (const ref of refs) {
+    const p = LM.parseSource(ref); if (!p) continue;
+    try {
+      if (p.kind === "world") {
+        const it = game.items?.get(p.id);
+        if (it) out.set(ref, { teaches: it._source?.flags?.[ID]?.teaches, trusted: !playerEditable(it) });
+        continue;
+      }
+      const pack = game.packs?.get(p.pack);
+      if (!pack || pack.documentName !== "Item") continue;
+      const index = await pack.getIndex({ fields: [`flags.${ID}.teaches`] });
+      const e = index?.get?.(p.id);
+      if (e) out.set(ref, { teaches: e.flags?.[ID]?.teaches ?? e[`flags.${ID}.teaches`], trusted: !playerEditable(pack) });
+    } catch (e) { warn("recipe item source", e); }
+  }
+  return out;
 }
 
 /**
  * Learn from a recipe item the actor carries. The item must be embedded on that actor (its UUID starts with the actor's), the recipe
- * comes from the item's own flag as stored (never from the payload), everything is checked again, then one item is used up unless
- * it is set to keep. Runs one at a time per actor (with crafts), so one item can't teach twice.
+ * comes from the item's own flag as stored (never from the payload), and for a player (0.5.1, unless *Trust recipe items without a
+ * source* is on) it must be a copy of a GM-authored recipe item teaching the same recipe (`LM.verifyTeaches`; the source's keep /
+ * use-up choice applies). Everything is checked again, then one item is used up unless it is set to keep. Runs one at a time per actor (with crafts), so one item can't teach twice.
  * @param {{ actor: string, item: string }} data @param {any} user
  */
 async function onLearnFromItem(data, user) {
@@ -120,8 +159,14 @@ async function onLearnFromItem(data, user) {
     if (!LM.itemOnActor(data.item, actor.uuid)) return tell(user, actor, "That item isn't in this character's inventory.");
     const item = actor.items.get(data.item.slice(actor.uuid.length + 6));
     if (!item) return tell(user, actor, "That item isn't in this character's inventory.");
-    const teaches = LM.normalizeTeaches(item._source?.flags?.[ID]?.teaches ?? item.flags?.[ID]?.teaches);
+    let teaches = LM.normalizeTeaches(item._source?.flags?.[ID]?.teaches ?? item.flags?.[ID]?.teaches);
     if (!teaches) return tell(user, actor, `${item.name} doesn't teach a recipe.`);
+    if (!user.isGM && !S.get("trustRecipeItems")) {
+      const refs = LM.sourceRefs(item._source);
+      const v = LM.verifyTeaches(teaches, refs, await teachingSources(refs));
+      if (!v.ok) return tell(user, actor, `${item.name} can't teach: ${v.reason}`);
+      teaches = v.teaches;
+    }
     const recipe = Data.recipes().list.find(r => r.id === teaches.recipe);
     const q = Number(item.system?.quantity);
     const a = LM.assessLearn({ ...learnFacts(actor, user), item: { teaches, qty: Number.isFinite(q) ? q : 1 } }, recipe, "item");
@@ -135,11 +180,13 @@ async function onLearnFromItem(data, user) {
   });
 }
 
-/** @param {{ actor: string, recipe: string }} data */
+/** Forget (GM only). Queued per actor like learning. @param {{ actor: string, recipe: string }} data */
 async function onForget(data) {
-  const actor = await actorOf(data.actor); if (!actor) return;
-  const r = RC.forget(Data.known(actor), data.recipe);
-  if (r.changed) await actor.setFlag(ID, "recipes", r.known);
+  return serial(data.actor, async () => {
+    const actor = await actorOf(data.actor); if (!actor) return;
+    const r = RC.forget(Data.known(actor), data.recipe);
+    if (r.changed) await actor.setFlag(ID, "recipes", r.known);
+  });
 }
 
 // ------------------------------------------------------------------ craft
@@ -305,7 +352,7 @@ async function decideNow(data) {
   const next = { ...st };
   if ("refuse" in d) { next.state = "refused"; await card.update({ content: cardView(next, { actor, recipe, reason: "The GM refused this craft: nothing was made or used." }), [`flags.${ID}.craft`]: next }); return; }
   if (!actor || !recipe) { next.state = "error"; await card.update({ content: cardView(next, { actor, recipe, reason: "The character or the recipe no longer exists." }), [`flags.${ID}.craft`]: next }); return; }
-  const a = assessIn(context(actor), recipe, st.helpers, Number(st.batch) || 1);
+  const a = assessIn(context(actor), recipe, st.helpers, CM.clampBatch(st.batch, Data.rules()));
   if (!a.canCraft) { next.state = "refused"; await card.update({ content: cardView(next, { actor, recipe, reason: `Nothing was made or used up: ${a.problems.join(" ")}` }), [`flags.${ID}.craft`]: next }); return; }
   await finish(actor, recipe, a, next, d.success, card);
 }
