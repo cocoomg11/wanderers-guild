@@ -525,3 +525,60 @@ export function decide(card, choice) {
   if (choice === "failure") return { success: false };
   return null;
 }
+
+// ------------------------------------------------------------------ paying before writing (0.5.3)
+
+/** An error's message as text. @param {unknown} e */
+const errText = e => String(/** @type {any} */ (e)?.message ?? e ?? "unknown error");
+
+/**
+ * Runs a craft's writes in a safe order (0.5.3): the coin cost is taken first (when `charge` > 0), and the item and materials are
+ * written only after the payment went through. A refused payment (`pay` resolves false, or throws) writes nothing. When a write fails
+ * after a payment, `refund` gives the coin back (when there is one); the result says whether it did, so the card can tell the GM.
+ * `write` gets a `step(name)` callback to record what it finished, so a failure part-way can list what was already written.
+ * Resolves to `{ ok: true, value, paid }` or `{ ok: false, stage: "pay" | "write", error, paid, refunded, refundError, done }`.
+ * @template T
+ * @param {{ charge: number, pay: () => Promise<unknown>, write: (step: (name: string) => void) => Promise<T>, refund?: (() => Promise<unknown>) | null }} o
+ */
+export async function payThenWrite(o) {
+  const charged = Number(o.charge) > 0;
+  if (charged) {
+    let r;
+    try { r = await o.pay(); } catch (e) { return { ok: false, stage: "pay", error: errText(e), paid: false, refunded: false, refundError: "", done: [] }; }
+    if (r === false) return { ok: false, stage: "pay", error: "not enough coin", paid: false, refunded: false, refundError: "", done: [] };
+  }
+  /** @type {string[]} */
+  const done = [];
+  try { return { ok: true, value: await o.write(name => { done.push(String(name)); }), paid: charged }; } catch (e) {
+    let refunded = false; let refundError = "";
+    if (charged && typeof o.refund === "function") {
+      try { refunded = (await o.refund()) !== false; if (!refunded) refundError = "the refund was refused"; } catch (e2) { refundError = errText(e2); }
+    } else if (charged) refundError = "no way to give coin back";
+    return { ok: false, stage: "write", error: errText(e), paid: charged, refunded, refundError, done };
+  }
+}
+
+/**
+ * The card's text for a craft whose writes failed (`payThenWrite`'s failure), with `coin` the cost as plain text ("5 gp").
+ * @param {{ stage: string, error: string, paid: boolean, refunded: boolean, refundError?: string, done?: string[] }} r @param {string} coin
+ */
+export function writeFailText(r, coin) {
+  if (r.stage === "pay") return `Nothing was made or used up: the coin cost couldn't be paid (${r.error}).`;
+  const done = r.done?.length ? ` Already done: ${r.done.join(", ")}; check the character's items.` : " Nothing was made or used up.";
+  if (!r.paid) return `The craft failed: ${r.error}.${done}`;
+  if (r.refunded) return `The craft failed after the coin cost was paid: ${r.error}. The coin (${coin}) was given back.${done}`;
+  return `The craft failed after the coin cost was paid: ${r.error}. The coin (${coin}) was taken and could NOT be given back (${r.refundError || "unknown"}): GM, return it by hand.${done}`;
+}
+
+/**
+ * The purse after adding `amount` (smallest coin) on top in the largest coins (no electrum), for a refund without the toolkit.
+ * @param {Record<string, unknown>} currency @param {number} amount @param {CoinValues} values
+ */
+export function addPlan(currency, amount, values) {
+  /** @type {Record<string, number>} */
+  const c = {};
+  for (const k of Object.keys(values)) c[k] = Math.max(0, Math.floor(Number(currency?.[k]) || 0));
+  let left = Math.max(0, Math.round(Number(amount) || 0));
+  for (const [k, v] of Object.entries(values).sort((a, b) => b[1] - a[1])) { if (k === "ep" || !(v > 0)) continue; const n = Math.floor(left / v); c[k] += n; left -= n * v; }
+  return c;
+}

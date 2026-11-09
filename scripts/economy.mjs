@@ -1,13 +1,13 @@
 /**
  * Prices: book values (the standard dnd5e coins) by default, or the world's own coins through the Wanderer's Toolkit when the
  * *Prices in the world's coins* switch is on and the toolkit is active. The toolkit is read only through its public API
- * (`coinRatio()`, `moneyHTML()`, `pay(actor, amount, { reason })`), defensively; it is never required. Untested in Node (reads
+ * (`coinRatio()`, `moneyHTML()`, `fmtMoney()`, `pay(actor, amount, { reason })`, `addMoney(actor, amount, { reason })`), defensively; it is never required. Untested in Node (reads
  * CONFIG and the toolkit); the money maths are in craft-model.mjs.
  */
 import { coins } from "../vendor/wanderers-core/index.mjs";
 import { TOOLKIT_ID } from "./const.mjs";
 import { S, log } from "./core.mjs";
-import { BOOK_VALUES, payPlan, purseTotal } from "./craft-model.mjs";
+import { BOOK_VALUES, addPlan, amountGp, payPlan, purseTotal } from "./craft-model.mjs";
 import * as D5 from "./dnd5e.mjs";
 
 /** The toolkit's API when it is active. */
@@ -51,4 +51,25 @@ export async function pay(actor, amount, reason) {
   if (plan.error || !plan.currency) throw new Error(plan.error ?? "not enough coin");
   await actor.update({ "system.currency": plan.currency });
   return true;
+}
+
+/**
+ * Gives `amount` (world's smallest coin) back to the actor after a craft that took the coin and then failed (0.5.3, active GM's
+ * client). The toolkit's `addMoney` when it is active (logged in its coin log with the reason), else the coins are added on top in
+ * the largest coins. Resolves to true, or throws.
+ * @param {any} actor @param {number} amount @param {string} reason
+ */
+export async function refund(actor, amount, reason) {
+  if (!(amount > 0)) return true;
+  const tk = toolkit();
+  if (tk && typeof tk.addMoney === "function") { await tk.addMoney(actor, amount, { reason }); return true; }
+  await actor.update({ "system.currency": addPlan(actor.system?.currency ?? {}, amount, D5.coinValues()) });
+  return true;
+}
+
+/** An amount (world's smallest coin) as plain text for card messages: the toolkit's `fmtMoney`, else gold pieces. @param {number} amount */
+export function text(amount) {
+  const tk = toolkit();
+  if (tk && typeof tk.fmtMoney === "function") { try { return String(tk.fmtMoney(amount)); } catch (e) { log("toolkit fmtMoney", e); } }
+  return `${Math.round(amountGp(amount, D5.coinValues()) * 100) / 100} gp`;
 }

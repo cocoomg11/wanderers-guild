@@ -2,6 +2,38 @@
 
 All notable changes to Wanderer's Guild. Versions follow the `version` in `module.json`.
 
+## 0.5.3 (2026-11-08)
+
+Fix from live test 10.
+
+### Fixed
+
+- **A refused coin payment no longer makes the item.** The coin cost is now paid before anything else is written: if Wanderer's Toolkit's `pay` refuses (returns false) or fails, nothing is made and no materials are used, and the card says *Nothing was made or used up: the coin cost couldn't be paid*. Before, the item was added and the materials used first, then the card said the payment failed. This covers every craft: resolved on the roll, approved by the GM (Approve, Success, Failure that uses up materials), batches and better results, with *Prices in the world's coins* on or off.
+- **A craft that fails after paying gives the coin back.** If making the item or using the materials fails after the coin was taken, the coin is refunded (through the toolkit's `addMoney` with a *Refund (craft failed)* line in its coin log when it is active; otherwise added back to the purse) and the card says so, listing anything already done. If the refund itself fails, the card says plainly that the coin was taken and the GM must return it by hand.
+
+### Changed (docs)
+
+- README: *Recipe items and honesty* moved out of the Troubleshooting list to its own section after *Rolls and honesty* (and in the contents). docs/crafting.md says the coin cost is paid first.
+- `package-lock.json` version synced (it read 0.1.0).
+
+### Under the hood
+
+- craft-model.mjs `payThenWrite({ charge, pay, write, refund })`, `writeFailText(r, coin)`, `addPlan(currency, amount, values)`; economy.mjs `refund(actor, amount, reason)`, `text(amount)`. craft-leader.mjs `apply` plans everything (materials, stack, item data) before paying and writes only inside `payThenWrite`; `finish` shows its failure text with state *error*.
+- Tests: `tests/v053.test.mjs` (pay refused / throws → nothing written; pay ok → item then materials; post-pay failure → refund, or the GM message; one write path; README section; version).
+
+### Untested in Foundry
+
+Check on Foundry 14.370 with dnd5e 6.0.6 and Wanderer's Toolkit, as the GM (and a player where noted):
+
+- [ ] Recipe with a coin cost (rules: *taken from the crafter's coin*), *GM approves each craft* on; console `game.modules.get('wayfarers-toolkit').api.pay = async () => false`; craft with enough coin; Approve: card says *Nothing was made or used up: the coin cost couldn't be paid*, no item, materials unchanged, coin unchanged.
+- [ ] Same with `api.pay = async () => { throw new Error("test") }`: same result, the card names the error.
+- [ ] Same with *GM approves each craft* off (resolved on the player's roll), and with a batch of 2: nothing made or used.
+- [ ] Reload (restores `pay`), craft normally: coin leaves the purse, the coin log has *Crafting: …*, item and materials as before; a better result too.
+- [ ] Missing result item: post a pending card, delete the recipe's result item from the Items sidebar, Approve: the card says the item can't be found; no coin taken (checked before paying).
+- [ ] Post-pay failure: a recipe with materials, pending card; on the GM client `Actor.implementation.prototype.updateEmbeddedDocuments = async () => { throw new Error("test") }`; Approve: the card says the craft failed after the coin was paid, the coin was given back, and lists what was already done (the new item, if one was created); the coin log has *Refund (craft failed): …*; the purse is back to its old total. Reload afterwards.
+- [ ] Same post-pay failure with the toolkit off: the coin comes back to the purse (largest coins).
+- [ ] README on GitHub: *Recipe items and honesty* shows as its own section; the contents link works.
+
 ## 0.5.2 (2026-11-08)
 
 Fixes from the live test of 0.5.1.

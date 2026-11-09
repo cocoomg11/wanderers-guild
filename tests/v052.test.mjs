@@ -107,10 +107,3 @@ test("README: recipe item source notes from live test 8", () => {
   assert.match(r, /leave Foundry's `_stats\.compendiumSource` and `_stats\.duplicateSource` empty/);
   assert.match(r, /set `_stats\.compendiumSource` on their own item/);
 });
-
-test("version 0.5.2", () => {
-  const m = JSON.parse(read("module.json")); const pkg = JSON.parse(read("package.json"));
-  assert.equal(m.version, "0.5.2"); assert.equal(pkg.version, "0.5.2");
-  assert.ok(m.download.endsWith("/v0.5.2/module.zip"));
-  assert.match(read("CHANGELOG.md"), /^## 0\.5\.2/m);
-});

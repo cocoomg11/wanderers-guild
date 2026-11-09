@@ -214,8 +214,12 @@ function readRoll(msg, user, actor, recipeId) {
  * Failure: the materials and coin only when the rules say they are lost. Returns what was used, for the card.
  * A batch (0.5) uses the materials and coin `a.batch` times over and makes `a.batch` times the result; a better roll makes the
  * recipe's better result (`CM.resultPlan`).
+ * 0.5.3: everything is checked and planned first (nothing written; a problem throws), then the coin cost is paid, and only when the
+ * payment went through are the item made and the materials used (`CM.payThenWrite`). A write failing after the payment gives the
+ * coin back (`Eco.refund`); the card says so, or says plainly that the GM must return it by hand. `{ fail }` is the card's text then.
  * @param {any} actor @param {import("./recipes-model.mjs").Recipe} recipe @param {ReturnType<typeof assessIn>} a @param {boolean} success
  * @param {boolean} better
+ * @returns {Promise<{ used: string[], coin: string, made: ReturnType<typeof CM.resultPlan>, fail?: string }>}
  */
 async function apply(actor, recipe, a, success, better) {
   const rules = Data.rules();
@@ -225,8 +229,11 @@ async function apply(actor, recipe, a, success, better) {
   if (consumed.error || !consumed.updates || !consumed.deletes) throw new Error(consumed.error ?? "Missing materials.");
   /** @type {{ updates: Array<Record<string, any>>, deletes: string[] }} */
   const plan = { updates: consumed.updates, deletes: consumed.deletes };
-  if (spend && a.charge && Eco.purse(actor) < a.charge) throw new Error("Not enough coin for the cost.");
+  const charge = spend && a.charge ? a.charge : 0;
+  if (charge && Eco.purse(actor) < charge) throw new Error("Not enough coin for the cost.");
   const made = CM.resultPlan(recipe, { batch: a.batch, better: success && better });
+  /** @type {any} */
+  let create = null;
   if (success) {
     const doc = await fromUuid(made.uuid);
     if (!doc || doc.documentName !== "Item") throw new Error(made.better && recipe.better.uuid ? "The better result item can't be found." : "The result item can't be found.");
@@ -237,18 +244,28 @@ async function apply(actor, recipe, a, success, better) {
       plan.updates = plan.updates.filter(u => u._id !== stack.id);
       plan.updates.push({ _id: stack.id, "system.quantity": left + qty });
     } else {
-      const data = doc.pack ? game.items.fromCompendium(doc) : doc.toObject();
-      delete data._id;
-      if (data.system && "quantity" in data.system) data.system.quantity = qty;
-      await actor.createEmbeddedDocuments("Item", [data]);
+      create = doc.pack ? game.items.fromCompendium(doc) : doc.toObject();
+      delete create._id;
+      if (create.system && "quantity" in create.system) create.system.quantity = qty;
     }
   }
   const used = spend ? CM.usedList(a.materials) : [];
-  if (plan.updates.length) await actor.updateEmbeddedDocuments("Item", plan.updates);
-  if (plan.deletes.length) await actor.deleteEmbeddedDocuments("Item", plan.deletes);
-  let coin = "";
-  if (spend && a.charge) { await Eco.pay(actor, a.charge, `Crafting: ${recipe.name}`); coin = Eco.html(a.cost ?? 0); }
-  return { used, coin, made };
+  const reason = `Crafting: ${recipe.name}`;
+  const r = await CM.payThenWrite({
+    charge,
+    pay: () => Eco.pay(actor, charge, reason),
+    refund: () => Eco.refund(actor, charge, `Refund (craft failed): ${recipe.name}`),
+    write: async step => {
+      if (create) { await actor.createEmbeddedDocuments("Item", [create]); step(`${made.name} added`); }
+      if (plan.updates.length) { await actor.updateEmbeddedDocuments("Item", plan.updates); step("item quantities changed"); }
+      if (plan.deletes.length) { await actor.deleteEmbeddedDocuments("Item", plan.deletes); step("used-up materials removed"); }
+    }
+  });
+  if (!r.ok) {
+    if ("stage" in r && r.stage === "write") warn(`craft ${recipe.name}: a write failed after payment (refunded: ${r.refunded})`, r.error);
+    return { used: [], coin: "", made, fail: CM.writeFailText(/** @type {any} */ (r), Eco.text(charge)) };
+  }
+  return { used, coin: charge ? Eco.html(a.cost ?? 0) : "", made };
 }
 
 /**
@@ -320,9 +337,15 @@ async function finish(actor, recipe, a, st, success, card) {
   Object.assign(st, CM.assessedState(a, Data.rules()));
   try {
     const r = await apply(actor, recipe, a, success, better);
-    st.state = success ? "done" : "failed";
-    st.better = r.made.better;
-    extras = { actor, recipe, used: r.used, coin: r.coin, made: success ? r.made : undefined, reason: success ? "" : CM.spends(false, Data.rules()) ? "The check failed; the materials are used up." : "The check failed; the materials are kept." };
+    if (r.fail) {
+      // 0.5.3: the payment was refused (nothing written), or a write failed after it (refunded, or the card asks the GM to).
+      st.state = "error";
+      extras = { actor, recipe, reason: r.fail };
+    } else {
+      st.state = success ? "done" : "failed";
+      st.better = r.made.better;
+      extras = { actor, recipe, used: r.used, coin: r.coin, made: success ? r.made : undefined, reason: success ? "" : CM.spends(false, Data.rules()) ? "The check failed; the materials are used up." : "The check failed; the materials are kept." };
+    }
   } catch (e) {
     warn("craft", e);
     st.state = "error";

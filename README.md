@@ -14,6 +14,7 @@ A [Foundry VTT](https://foundryvtt.com) module (v13 and v14) for the dnd5e syste
 - [Public API and hooks](#public-api-and-hooks)
 - [Data Wanderer's Guild writes](#data-wanderers-guild-writes)
 - [Rolls and honesty](#rolls-and-honesty)
+  - [Recipe items and honesty](#recipe-items-and-honesty)
 - [Troubleshooting](#troubleshooting)
 - [Development](#development)
 - [License](#license)
@@ -136,6 +137,10 @@ Crafting and gathering checks are rolled on the player's client with dnd5e's own
 
 What stays on the honor system: the dice faces (the d20 and any bonus die). A player's browser makes the roll, so a determined player can still write any result from 1 to 20 (or any in-range result on a bonus die) into their own message. Advantage and disadvantage aren't checked either (the kept die counts). If that matters at your table, turn on *GM approves each craft*, and roll gathering checks in view of the table. A GM's own rolls and days are taken as sent.
 
+### Recipe items and honesty
+
+A recipe item is an item on the player's own character, so the player's client can edit it. Since 0.5.1 the GM's client checks a player's copy against where it came from: the mark's `src` (the world item the GM marked; every mark and *Make recipe item* stamp it, and copies keep it, including Item Piles purchases, which copy the item's data with its flags) or Foundry's own source fields (`_stats.compendiumSource`, `_stats.duplicateSource`, legacy `flags.core.sourceId`). That source must be a world item no player owns, or an item in a compendium no player can edit, and its own mark must teach the same recipe; its *keep / use up* choice applies. In practice only the mark's `src` carries the source for most copies: an item dragged from the Items sidebar onto a sheet and an Item Piles purchase leave Foundry's `_stats.compendiumSource` and `_stats.duplicateSource` empty (seen on Foundry 14.370); a copy dragged from a compendium has `compendiumSource`. What's left is an honor system: a player who edits their own items from the console can still copy a real recipe item's mark (and so learn a recipe the GM has a recipe item for, without having been given it), and Foundry also lets them set `_stats.compendiumSource` on their own item, which helps no more than copying `src` does (the item's own mark must still match the source's). Rank and *GM only* always apply. GMs learning from an item are not checked.
+
 ## Troubleshooting
 
 - **A character shows no professions.** It needs proficiency (not half proficiency) with one of a profession's linked tools; check the character's Tools on the dnd5e sheet and the links on the setup window's Professions page.
@@ -145,9 +150,6 @@ What stays on the honor system: the dice faces (the d20 and any bonus die). A pl
 - **A recipe item does nothing.** It must be in the character's own inventory, its recipe must still exist and not be *GM only*; the health check lists recipe items whose recipe is gone.
 - **"… can't teach: the recipe item it was copied from can't be found".** A player's copy must come from a recipe item the GM marked (0.5.1). The GM deleted or unmarked that world item, or the copy was made on the character by hand: mark the world item again, press *Stamp recipe items* on the setup window's Health page (or in the Satchel's health check) for items marked before 0.5.1, teach the recipe as GM, or turn on *Trust recipe items without a source*.
 
-### Recipe items and honesty
-
-A recipe item is an item on the player's own character, so the player's client can edit it. Since 0.5.1 the GM's client checks a player's copy against where it came from: the mark's `src` (the world item the GM marked; every mark and *Make recipe item* stamp it, and copies keep it, including Item Piles purchases, which copy the item's data with its flags) or Foundry's own source fields (`_stats.compendiumSource`, `_stats.duplicateSource`, legacy `flags.core.sourceId`). That source must be a world item no player owns, or an item in a compendium no player can edit, and its own mark must teach the same recipe; its *keep / use up* choice applies. In practice only the mark's `src` carries the source for most copies: an item dragged from the Items sidebar onto a sheet and an Item Piles purchase leave Foundry's `_stats.compendiumSource` and `_stats.duplicateSource` empty (seen on Foundry 14.370); a copy dragged from a compendium has `compendiumSource`. What's left is an honor system: a player who edits their own items from the console can still copy a real recipe item's mark (and so learn a recipe the GM has a recipe item for, without having been given it), and Foundry also lets them set `_stats.compendiumSource` on their own item, which helps no more than copying `src` does (the item's own mark must still match the source's). Rank and *GM only* always apply. GMs learning from an item are not checked.
 - **No better result / no How many box.** Both are off until you set *Better result margin* and *Batches* on the Crafting rules page; a better result also needs a DC and a *Better result* on the recipe.
 - **Every craft succeeds.** No DC is set, so the roll crafts it: give the recipe a DC, or fill in a base DC or the rarity table on the Crafting rules page.
 - **Every craft waits for the GM.** *GM approves each craft* is on (setup › Settings); turn it off to resolve crafts on the roll.

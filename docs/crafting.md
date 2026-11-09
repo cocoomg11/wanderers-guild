@@ -109,6 +109,7 @@ The **Craft** page lists the profession's recipes, coloured by rarity: *can craf
 **Craft** rolls the tool check (dnd5e's own roll dialog, with the DC as the target). When the roll lands, its chat message goes to the active GM's client, which checks everything again (the roll is this character's, for this recipe, recent and not used before; the character is owned by the player; the recipe is known; the rank allows it; the materials and coin are in the inventory now) and resolves the craft at once:
 
 - **Success**: the item is added (or a matching stack of a consumable or loot item grows), the materials are used up, the coin cost is paid when the rules say so.
+- **The coin cost is paid first** (0.5.3): if the payment is refused (Wanderer's Toolkit says the purse is short, or it fails), nothing is made or used up and the card says so. If making the item or using the materials fails after the coin was paid, the coin is given back (through the toolkit's coin log when it is active) and the card says so; if even that fails, the card tells the GM to return the coin by hand.
 - **Failure**: the materials (and the coin cost) are used up too, unless the rules say failures keep them.
 - **No DC set** anywhere: the craft succeeds on the roll.
 - **Materials gone** by then (traded, used, dropped): the craft is refused, nothing is made or used up.
